@@ -109,13 +109,13 @@ def db_snapshot(run_id: str) -> dict:
 
 # ── Markers ────────────────────────────────────────────────────────────────────
 
-def pytest_configure(config_obj):
-    config_obj.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
-    config_obj.addinivalue_line("markers", "regression: Regression tests (rows 76-119)")
-    config_obj.addinivalue_line("markers", "signals:    Tests for the signals schema")
-    config_obj.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
-    config_obj.addinivalue_line("markers", "api:        Phase-1 API-only tests")
-    config_obj.addinivalue_line("markers", "db:         Phase-2 DB-only tests")
+def pytest_configure(config):
+    config.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
+    config.addinivalue_line("markers", "regression: Regression tests (rows 76-119)")
+    config.addinivalue_line("markers", "signals:    Tests for the signals schema")
+    config.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
+    config.addinivalue_line("markers", "api:        Phase-1 API-only tests")
+    config.addinivalue_line("markers", "db:         Phase-2 DB-only tests")
 
 
 # ── CLI helpers ────────────────────────────────────────────────────────────────
