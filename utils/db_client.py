@@ -3,8 +3,9 @@ db_client.py
 ────────────
 PostgreSQL helpers for verifying data written by the DataReceiver API.
 
-All public functions return plain dicts / lists so tests stay readable
-without knowing psycopg2 internals.
+Key addition: get_bulk_snapshot(run_id) — fetches ALL records for a test run
+in a single query. Used by the two-phase architecture so the whole DB
+verification phase costs one wait + three SELECTs total.
 """
 import time
 from contextlib import contextmanager
@@ -17,7 +18,6 @@ import config
 
 @contextmanager
 def _conn():
-    """Yield a short-lived connection, then close it."""
     conn = psycopg2.connect(**config.DB_CONFIG)
     try:
         yield conn
@@ -26,7 +26,6 @@ def _conn():
 
 
 def _fetch(sql: str, params: tuple = ()) -> list[dict]:
-    """Execute a SELECT and return rows as a list of dicts."""
     with _conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params)
@@ -34,7 +33,6 @@ def _fetch(sql: str, params: tuple = ()) -> list[dict]:
 
 
 def _execute(sql: str, params: tuple = ()) -> int:
-    """Execute a non-SELECT statement and return rowcount."""
     with _conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
@@ -42,12 +40,9 @@ def _execute(sql: str, params: tuple = ()) -> int:
             return cur.rowcount
 
 
-# ── Signals ───────────────────────────────────────────────────────────────────
+# ── Individual lookups (kept for backwards compatibility) ──────────────────────
 
 def get_client_users_data(client_user_id: str) -> list[dict]:
-    """Return all rows from profiles.client_users_data for a given client_user_id.
-    Case-insensitive: the API inconsistently lowercases IDs on some paths.
-    """
     return _fetch(
         "SELECT * FROM profiles.client_users_data WHERE LOWER(client_user_id) = LOWER(%s)",
         (client_user_id,),
@@ -55,9 +50,6 @@ def get_client_users_data(client_user_id: str) -> list[dict]:
 
 
 def get_client_user_mapping(client_user_id: str) -> list[dict]:
-    """Return mapping rows for a client_user_id.
-    Case-insensitive: the API lowercases client_user_id when writing to this table.
-    """
     return _fetch(
         "SELECT * FROM profiles.client_user_mapping WHERE LOWER(client_user_id) = LOWER(%s)",
         (client_user_id,),
@@ -65,36 +57,90 @@ def get_client_user_mapping(client_user_id: str) -> list[dict]:
 
 
 def get_raw_signals() -> list[dict]:
-    """Return all rows from profiles.raw_signals (signal metadata/stats store)."""
     return _fetch("SELECT * FROM profiles.raw_signals")
 
 
-# ── UserProperties ─────────────────────────────────────────────────────────────
-
 def get_user_properties(client_user_id: str) -> list[dict]:
-    """Return all user_properties rows for a given client_user_id.
-    Joins through client_user_mapping because user_properties has no client_user_id column —
-    it uses da_user_id (UUID) as its FK. Case-insensitive on the mapping join.
-    """
+    """Joins through client_user_mapping because user_properties has no client_user_id column."""
     return _fetch(
         """
         SELECT up.*
         FROM   profiles.user_properties up
-        JOIN   profiles.client_user_mapping cum
-               ON cum.da_user_id = up.da_user_id
+        JOIN   profiles.client_user_mapping cum ON cum.da_user_id = up.da_user_id
         WHERE  LOWER(cum.client_user_id) = LOWER(%s)
         """,
         (client_user_id,),
     )
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── Bulk snapshot — the core of the two-phase approach ────────────────────────
+
+def get_bulk_snapshot(run_id: str) -> dict:
+    """
+    Fetch ALL records created by a test run in three queries.
+    Returns a dict with three sub-dicts, each keyed by lowercase client_user_id.
+
+        {
+          "user_properties":    { "at_user_xxxx_...": [row, ...] },
+          "client_users_data":  { "at_user_xxxx_...": [row, ...] },
+          "client_user_mapping":{ "at_user_xxxx_...": [row, ...] },
+        }
+
+    Phase-2 DB tests do instant dict lookups against this — no DB calls,
+    no polling, no waiting.
+    """
+    prefix = f"at_user_{run_id.lower()}%"
+
+    # ── 1. user_properties (via mapping join) ──────────────────────────────────
+    up_rows = _fetch(
+        """
+        SELECT up.*, cum.client_user_id AS _client_user_id
+        FROM   profiles.user_properties up
+        JOIN   profiles.client_user_mapping cum ON cum.da_user_id = up.da_user_id
+        WHERE  LOWER(cum.client_user_id) LIKE %s
+        ORDER  BY up.id
+        """,
+        (prefix,),
+    )
+
+    # ── 2. client_users_data ───────────────────────────────────────────────────
+    cud_rows = _fetch(
+        """
+        SELECT * FROM profiles.client_users_data
+        WHERE  LOWER(client_user_id) LIKE %s
+        ORDER  BY id
+        """,
+        (prefix,),
+    )
+
+    # ── 3. client_user_mapping ─────────────────────────────────────────────────
+    cum_rows = _fetch(
+        """
+        SELECT * FROM profiles.client_user_mapping
+        WHERE  LOWER(client_user_id) LIKE %s
+        ORDER  BY id
+        """,
+        (prefix,),
+    )
+
+    # ── Build lookup dicts keyed by lowercase client_user_id ──────────────────
+    def group_by_user(rows: list[dict], id_field: str = "client_user_id") -> dict:
+        result: dict = {}
+        for row in rows:
+            key = row[id_field].lower()
+            result.setdefault(key, []).append(row)
+        return result
+
+    return {
+        "user_properties":    group_by_user(up_rows,  "_client_user_id"),
+        "client_users_data":  group_by_user(cud_rows, "client_user_id"),
+        "client_user_mapping": group_by_user(cum_rows, "client_user_id"),
+    }
+
+
+# ── Legacy pollers (still used if someone calls them directly) ─────────────────
 
 def wait_for_signal_in_db(client_user_id: str, max_wait: int = None) -> list[dict]:
-    """
-    Poll profiles.client_users_data until rows appear or max_wait seconds elapse.
-    Returns the rows found (empty list on timeout).
-    """
     max_wait = max_wait or config.DB_PROPAGATION_DELAY
     deadline = time.time() + max_wait
     while time.time() < deadline:
@@ -105,29 +151,7 @@ def wait_for_signal_in_db(client_user_id: str, max_wait: int = None) -> list[dic
     return []
 
 
-def wait_for_user_mapping_in_db(client_user_id: str, max_wait: int = None) -> list[dict]:
-    """
-    Poll profiles.client_user_mapping until rows appear or max_wait seconds elapse.
-    The API lowercases client_user_id when writing to this table, so querying
-    with LOWER() on both sides (already done in get_client_user_mapping) handles
-    case mismatches correctly. The real reason to poll is that the DB write is async.
-    Returns the rows found (empty list on timeout).
-    """
-    max_wait = max_wait or config.DB_PROPAGATION_DELAY
-    deadline = time.time() + max_wait
-    while time.time() < deadline:
-        rows = get_client_user_mapping(client_user_id)
-        if rows:
-            return rows
-        time.sleep(1)
-    return []
-
-
 def wait_for_user_property_in_db(client_user_id: str, max_wait: int = None) -> list[dict]:
-    """
-    Poll profiles.user_properties (via mapping join) until rows appear or max_wait seconds elapse.
-    Returns the rows found (empty list on timeout).
-    """
     max_wait = max_wait or config.DB_PROPAGATION_DELAY
     deadline = time.time() + max_wait
     while time.time() < deadline:
@@ -138,54 +162,29 @@ def wait_for_user_property_in_db(client_user_id: str, max_wait: int = None) -> l
     return []
 
 
-# ── Cleanup helpers ────────────────────────────────────────────────────────────
+# ── Run-level record helpers (for cleanup) ─────────────────────────────────────
 
 def get_test_records_by_run(run_id: str) -> dict:
-    """
-    Return all DB records created by a specific test run, grouped by table.
-    Uses the AT_USER_<run_id> / AT_SIG_<run_id> / AT_PROP_<run_id> naming convention.
-
-    Returns a dict:
-        {
-            "client_users_data":  [{"id": ..., "client_user_id": ..., "signal_name": ...}, ...],
-            "client_user_mapping": [{"id": ..., "client_user_id": ...}, ...],
-            "user_properties":    [{"id": ..., "da_user_id": ...}, ...],
-        }
-    """
     prefix = f"at_user_{run_id.lower()}%"
-
     signals = _fetch(
-        """
-        SELECT id, client_user_id, signal_name
-        FROM   profiles.client_users_data
-        WHERE  LOWER(client_user_id) LIKE %s
-        ORDER  BY id
-        """,
+        "SELECT id, client_user_id, signal_name FROM profiles.client_users_data "
+        "WHERE LOWER(client_user_id) LIKE %s ORDER BY id",
         (prefix,),
     )
-
     mapping = _fetch(
-        """
-        SELECT id, client_user_id, da_user_id
-        FROM   profiles.client_user_mapping
-        WHERE  LOWER(client_user_id) LIKE %s
-        ORDER  BY id
-        """,
+        "SELECT id, client_user_id, da_user_id FROM profiles.client_user_mapping "
+        "WHERE LOWER(client_user_id) LIKE %s ORDER BY id",
         (prefix,),
     )
-
-    # user_properties has no client_user_id — join through mapping
     props = _fetch(
         """
         SELECT up.id, up.da_user_id, up.property_name, up.property_value
         FROM   profiles.user_properties up
         JOIN   profiles.client_user_mapping cum ON cum.da_user_id = up.da_user_id
-        WHERE  LOWER(cum.client_user_id) LIKE %s
-        ORDER  BY up.id
+        WHERE  LOWER(cum.client_user_id) LIKE %s ORDER BY up.id
         """,
         (prefix,),
     )
-
     return {
         "client_users_data":   signals,
         "client_user_mapping": mapping,
@@ -194,42 +193,22 @@ def get_test_records_by_run(run_id: str) -> dict:
 
 
 def delete_test_records_by_run(run_id: str) -> dict:
-    """
-    Delete all records created by a specific test run from all three tables.
-    Returns a dict with the row counts deleted per table.
-
-    Deletion order matters: user_properties → client_users_data → client_user_mapping
-    (mapping rows may be FK-referenced by user_properties).
-    """
     prefix = f"at_user_{run_id.lower()}%"
-
-    # 1. user_properties (joined delete via mapping)
-    props_deleted = _execute(
-        """
-        DELETE FROM profiles.user_properties
-        WHERE da_user_id IN (
-            SELECT da_user_id
-            FROM   profiles.client_user_mapping
-            WHERE  LOWER(client_user_id) LIKE %s
-        )
-        """,
+    props = _execute(
+        "DELETE FROM profiles.user_properties WHERE da_user_id IN "
+        "(SELECT da_user_id FROM profiles.client_user_mapping WHERE LOWER(client_user_id) LIKE %s)",
         (prefix,),
     )
-
-    # 2. client_users_data
-    signals_deleted = _execute(
+    signals = _execute(
         "DELETE FROM profiles.client_users_data WHERE LOWER(client_user_id) LIKE %s",
         (prefix,),
     )
-
-    # 3. client_user_mapping (last, as it may be referenced)
-    mapping_deleted = _execute(
+    mapping = _execute(
         "DELETE FROM profiles.client_user_mapping WHERE LOWER(client_user_id) LIKE %s",
         (prefix,),
     )
-
     return {
-        "user_properties":     props_deleted,
-        "client_users_data":   signals_deleted,
-        "client_user_mapping": mapping_deleted,
+        "user_properties":     props,
+        "client_users_data":   signals,
+        "client_user_mapping": mapping,
     }

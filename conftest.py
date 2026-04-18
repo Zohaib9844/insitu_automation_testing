@@ -1,8 +1,20 @@
 """
 conftest.py
 ───────────
-Shared pytest fixtures and hooks for the InSitu QA suite.
+Two-phase DB verification design
+─────────────────────────────────
+Phase 1  (test_phase1_api.py)  – all API calls fire, responses asserted,
+          each test writes what it submitted into `submissions` dict.
+
+Phase 2  (test_phase2_db.py)   – `db_snapshot` session fixture fires ONCE:
+          sleeps DB_PROPAGATION_DELAY once, runs ONE bulk SQL query for the
+          whole run, returns a lookup dict. Every DB assertion is an instant
+          dict lookup — no per-test polling, no per-test DB round trips.
+
+Wait time:  1 × DB_PROPAGATION_DELAY   (was N_tests × delay)
+DB queries: 3 bulk SELECTs per session  (was N_tests SELECTs)
 """
+
 import sys
 import time
 import uuid
@@ -10,31 +22,27 @@ from pathlib import Path
 
 import pytest
 
-# Make project root importable so `import config` / `import utils.*` work
 sys.path.insert(0, str(Path(__file__).parent))
 
+import config
 from utils import db_client
 
-# ── Module-level run_id storage (needed by session-finish hook) ────────────────
-# Fixtures can't be accessed inside pytest hooks directly, so we cache it here.
 _session_run_id: str | None = None
 
 
-# ── Unique test-run ID ─────────────────────────────────────────────────────────
+# ── Session run ID ─────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
 def run_id() -> str:
-    """A short unique ID that ties all DB records created in this test run together."""
     global _session_run_id
     _session_run_id = uuid.uuid4().hex[:8].upper()
     return _session_run_id
 
 
-# ── Unique per-test identifiers ────────────────────────────────────────────────
+# ── Per-test unique identifiers ────────────────────────────────────────────────
 
 @pytest.fixture
 def unique_user_id(run_id) -> str:
-    """e.g. AT_USER_A3F21B04_1712345678"""
     return f"AT_USER_{run_id}_{int(time.time())}"
 
 
@@ -48,49 +56,114 @@ def unique_property_name(run_id) -> str:
     return f"AT_PROP_{run_id}_{int(time.time())}"
 
 
-# ── Pytest hooks ───────────────────────────────────────────────────────────────
+# ── Submissions registry ───────────────────────────────────────────────────────
 
-def pytest_configure(config):
-    """Register custom markers so pytest doesn't warn about unknown ones."""
-    config.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
-    config.addinivalue_line("markers", "signals:    Tests for the signals schema")
-    config.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
-    config.addinivalue_line("markers", "db:         Tests that verify DB state")
-    config.addinivalue_line("markers", "regression: Regression / negative / boundary tests")
-    config.addinivalue_line("markers", "skip_reason: Tests skipped with a documented reason")
+@pytest.fixture(scope="session")
+def submissions() -> dict:
+    """
+    Session-level dict. Phase-1 API tests WRITE into this.
+    Phase-2 DB tests READ from this.
+
+    Schema per entry:
+        submissions["76"] = {
+            "user_ids":      ["AT_USER_XXXX_..."],   # all user IDs submitted
+            "property_name": "AT_PROP_XXXX_...",     # UP tests
+            "signal_name":   "AT_SIG_XXXX_...",      # signal tests
+            "api_status":    200,                    # HTTP status received
+            "extra":         {},                     # anything row-specific
+        }
+    """
+    return {}
+
+
+# ── Bulk DB snapshot (runs ONCE for the whole session) ────────────────────────
+
+@pytest.fixture(scope="session")
+def db_snapshot(run_id: str) -> dict:
+    """
+    Called the first time any Phase-2 DB test needs it — and only then.
+    Waits once, bulk-queries once, caches forever for the session.
+
+    Returns:
+        {
+          "user_properties":    { "at_user_xxxx_...": [row_dict, ...] },
+          "client_users_data":  { "at_user_xxxx_...": [row_dict, ...] },
+          "client_user_mapping":{ "at_user_xxxx_...": [row_dict, ...] },
+        }
+
+    Usage in DB tests:
+        rows = db_snapshot["user_properties"].get(self.client_user_id.lower(), [])
+        assert rows, f"Not found: {self.client_user_id}"
+    """
+    print(f"\n[db_snapshot] Waiting {config.DB_PROPAGATION_DELAY}s for async writes …")
+    time.sleep(config.DB_PROPAGATION_DELAY)
+    print(f"[db_snapshot] Bulk-querying run {run_id} …")
+    snapshot = db_client.get_bulk_snapshot(run_id)
+    total = sum(
+        sum(len(v) for v in table.values())
+        for table in snapshot.values()
+    )
+    print(f"[db_snapshot] Done — {total} rows cached. All DB tests are now instant.\n")
+    return snapshot
+
+
+# ── Markers ────────────────────────────────────────────────────────────────────
+
+def pytest_configure(config_obj):
+    config_obj.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
+    config_obj.addinivalue_line("markers", "regression: Regression tests (rows 76-119)")
+    config_obj.addinivalue_line("markers", "signals:    Tests for the signals schema")
+    config_obj.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
+    config_obj.addinivalue_line("markers", "api:        Phase-1 API-only tests")
+    config_obj.addinivalue_line("markers", "db:         Phase-2 DB-only tests")
+
+
+# ── CLI helpers ────────────────────────────────────────────────────────────────
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--cleanup-run", metavar="RUN_ID", default=None,
+        help="Delete all DB records for a previous run and exit.",
+    )
+
+
+def pytest_sessionstart(session):
+    rid = session.config.getoption("--cleanup-run", default=None)
+    if not rid:
+        return
+    print(f"\n[cleanup] Run: {rid.upper()}")
+    try:
+        records = db_client.get_test_records_by_run(rid)
+        total = sum(len(v) for v in records.values())
+        if total == 0:
+            pytest.exit("Nothing to clean up.", returncode=0)
+        deleted = db_client.delete_test_records_by_run(rid)
+        for table, count in deleted.items():
+            print(f"   Deleted {count} from profiles.{table}")
+    except Exception as exc:
+        print(f"[cleanup] Error: {exc}")
+        pytest.exit("Cleanup failed.", returncode=1)
+    pytest.exit("Cleanup complete.", returncode=0)
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """
-    After all tests complete, show the DB records created this run and
-    interactively ask whether to delete them.
-
-    Requires pytest to be run with -s (no output capture) so that
-    input() can read from the terminal. In CI environments where stdin
-    is not a tty, the prompt is skipped automatically.
-    """
     if _session_run_id is None:
-        # No tests actually ran (e.g. collection-only mode)
         return
-
-    # ── Fetch records ──────────────────────────────────────────────────────────
     try:
         records = db_client.get_test_records_by_run(_session_run_id)
     except Exception as exc:
-        print(f"\n[cleanup] Could not query DB for run {_session_run_id}: {exc}")
+        print(f"\n[cleanup] DB unavailable: {exc}")
         return
 
     total = sum(len(v) for v in records.values())
-
     print("\n" + "═" * 70)
-    print(f"  TEST RUN: {_session_run_id}  —  {total} record(s) created in DB")
+    print(f"  RUN {_session_run_id}  —  {total} record(s) in DB")
     print("═" * 70)
 
     if total == 0:
         print("  Nothing to clean up.\n")
         return
 
-    # ── Print summary table ────────────────────────────────────────────────────
     for table, rows in records.items():
         if not rows:
             continue
@@ -99,81 +172,27 @@ def pytest_sessionfinish(session, exitstatus):
             if table == "client_users_data":
                 print(f"  │  id={row['id']}  user={row['client_user_id']}  signal={row['signal_name']}")
             elif table == "client_user_mapping":
-                print(f"  │  id={row['id']}  user={row['client_user_id']}  da_user_id={row['da_user_id']}")
+                print(f"  │  id={row['id']}  user={row['client_user_id']}")
             elif table == "user_properties":
-                print(f"  │  id={row['id']}  da_user_id={row['da_user_id']}  prop={row['property_name']}={row['property_value']}")
+                print(f"  │  id={row['id']}  prop={row['property_name']}={row.get('property_value', '')}")
         print(f"  └{'─' * 60}")
 
-    # ── Prompt ────────────────────────────────────────────────────────────────
-    # Skip prompt when stdin is not a real terminal (CI pipelines, piped input).
     if not sys.stdin.isatty():
-        print("\n[cleanup] Non-interactive environment detected — skipping cleanup prompt.")
-        print(f"[cleanup] To clean up manually, run:  pytest --cleanup-run {_session_run_id}\n")
+        print(f"\n[cleanup] CI mode — run:  pytest --cleanup-run {_session_run_id}\n")
         return
 
     print()
     try:
-        answer = input(f"  Delete all {total} record(s) for run {_session_run_id}? [y/N] ").strip().lower()
+        answer = input(
+            f"  Delete all {total} record(s) for run {_session_run_id}? [y/N] "
+        ).strip().lower()
     except (EOFError, KeyboardInterrupt):
-        print("\n[cleanup] Prompt interrupted — records kept.")
-        return
+        answer = "n"
 
     if answer == "y":
-        try:
-            deleted = db_client.delete_test_records_by_run(_session_run_id)
-            print(f"\n  ✔ Deleted:")
-            for table, count in deleted.items():
-                print(f"     {count} row(s) from profiles.{table}")
-        except Exception as exc:
-            print(f"\n  ✘ Cleanup failed: {exc}")
-    else:
-        print(f"\n  Records kept. Run ID: {_session_run_id}")
-        print(f"  To clean up later, run:  pytest --cleanup-run {_session_run_id}")
-
-    print()
-
-
-# ── Optional --cleanup-run CLI flag ───────────────────────────────────────────
-
-def pytest_addoption(parser):
-    """Add --cleanup-run <RUN_ID> option to delete records from a previous run."""
-    parser.addoption(
-        "--cleanup-run",
-        metavar="RUN_ID",
-        default=None,
-        help="Delete all DB records for a previous test run and exit. "
-             "Example: pytest --cleanup-run A3F21B04",
-    )
-
-
-def pytest_sessionstart(session):
-    """If --cleanup-run was passed, delete those records and exit before any tests run."""
-    run_id_to_clean = session.config.getoption("--cleanup-run", default=None)
-    if not run_id_to_clean:
-        return
-
-    print(f"\n[cleanup] Looking up records for run: {run_id_to_clean.upper()}")
-    try:
-        records = db_client.get_test_records_by_run(run_id_to_clean)
-        total = sum(len(v) for v in records.values())
-
-        if total == 0:
-            print(f"[cleanup] No records found for run {run_id_to_clean.upper()}.")
-            pytest.exit("Nothing to clean up.", returncode=0)
-
-        print(f"[cleanup] Found {total} record(s):")
-        for table, rows in records.items():
-            if rows:
-                ids = [str(r["id"]) for r in rows]
-                print(f"   profiles.{table}: ids {', '.join(ids)}")
-
-        deleted = db_client.delete_test_records_by_run(run_id_to_clean)
-        print("[cleanup] Deleted:")
+        deleted = db_client.delete_test_records_by_run(_session_run_id)
         for table, count in deleted.items():
-            print(f"   {count} row(s) from profiles.{table}")
-
-    except Exception as exc:
-        print(f"[cleanup] Error: {exc}")
-        pytest.exit("Cleanup failed.", returncode=1)
-
-    pytest.exit("Cleanup complete.", returncode=0)  
+            print(f"  ✔ {count} row(s) from profiles.{table}")
+    else:
+        print(f"  Kept. Clean later: pytest --cleanup-run {_session_run_id}")
+    print()
