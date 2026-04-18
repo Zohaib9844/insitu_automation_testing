@@ -32,7 +32,7 @@ from utils import db_client
 _session_run_id: str | None = None
 _report_meta: dict[str, dict] = {}
 _coverage_summary: dict[str, list[int]] = {"present": [], "missing": [], "extra": []}
-_case_results: dict[str, dict[str, list[bool]]] = {}
+_case_results: dict[str, dict[str, list[dict[str, str | bool]]]] = {}
 
 
 # ── Session run ID ─────────────────────────────────────────────────────────────
@@ -243,31 +243,71 @@ def _case_key(item: pytest.Item) -> str:
     return item.nodeid
 
 
-def _final_verdict(item: pytest.Item) -> str:
-    """
-    DB is the source of truth whenever a case has DB checks.
-    API-only cases fall back to API outcomes.
-    """
-    case = _case_key(item)
-    outcomes = _case_results.get(case, {})
-    db = outcomes.get("db", [])
-    api = outcomes.get("api", [])
+def _bucket_status(case: str, bucket: str) -> str:
+    entries = _case_results.get(case, {}).get(bucket, [])
+    if not entries:
+        return "N/A"
+    if any(not bool(e.get("passed")) for e in entries):
+        return "FAIL"
+    if any(bool(e.get("passed")) for e in entries):
+        return "PASS"
+    return "SKIP"
 
-    if db:
-        return "FAIL" if any(not ok for ok in db) else "PASS"
-    if api:
-        return "FAIL" if any(not ok for ok in api) else "PASS"
-    return "N/A"
+
+def _bucket_reason(case: str, bucket: str) -> str:
+    entries = _case_results.get(case, {}).get(bucket, [])
+    if not entries:
+        return "N/A"
+    failed = [str(e.get("reason", "")).strip() for e in entries if not bool(e.get("passed"))]
+    if failed:
+        return failed[0]
+    passed_count = sum(1 for e in entries if bool(e.get("passed")))
+    return f"All {bucket.upper()} checks passed ({passed_count})"
 
 
 def _final_verdict_for_case(case: str) -> str:
-    outcomes = _case_results.get(case, {})
-    db = outcomes.get("db", [])
-    api = outcomes.get("api", [])
-    if db:
-        return "FAIL" if any(not ok for ok in db) else "PASS"
-    if api:
-        return "FAIL" if any(not ok for ok in api) else "PASS"
+    db = _bucket_status(case, "db")
+    api = _bucket_status(case, "api")
+    if db != "N/A":
+        return db
+    if api != "N/A":
+        return api
+    return "N/A"
+
+
+def _failure_diagnosis(case: str) -> str:
+    api_status = _bucket_status(case, "api")
+    db_status = _bucket_status(case, "db")
+    api_reason = _bucket_reason(case, "api")
+    db_reason = _bucket_reason(case, "db")
+
+    if db_status == "FAIL" and api_status == "PASS":
+        return f"API passed, DB failed — {db_reason}"
+    if db_status == "PASS" and api_status == "FAIL":
+        return f"API failed, DB passed — {api_reason}"
+    if db_status == "FAIL" and api_status == "FAIL":
+        return f"Both failed — API: {api_reason} | DB: {db_reason}"
+    if db_status == "FAIL":
+        return f"DB failed — {db_reason}"
+    if api_status == "FAIL":
+        return f"API failed — {api_reason}"
+    if db_status == "PASS" and api_status == "PASS":
+        return "API and DB checks passed"
+    if db_status == "PASS" and api_status == "N/A":
+        return "DB checks passed (no API check in this case)"
+    if api_status == "PASS" and db_status == "N/A":
+        return "API checks passed (API-only case)"
+    return "N/A"
+
+
+def _case_order(item: pytest.Item) -> str:
+    row = _extract_row_number(item.nodeid)
+    if row is not None:
+        return str(row)
+    class_doc = (getattr(item.cls, "__doc__", "") or "").strip().upper()
+    tc = re.search(r"\bTC-[A-Z]+-(\d+)\b", class_doc)
+    if tc:
+        return tc.group(1)
     return "N/A"
 
 
@@ -343,50 +383,73 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     if report.when != "call":
         return
 
+    layer = _layer(item)
     if report.failed:
-        reason = f"{_layer(item)} failed"
+        default_reason = f"{layer} failed"
+        longrepr = str(getattr(report, "longreprtext", "") or getattr(report, "longrepr", "") or "")
+        reason = longrepr.strip().splitlines()[-1] if longrepr.strip() else default_reason
     elif report.passed:
-        reason = f"{_layer(item)} passed"
+        reason = f"{layer} passed"
     else:
-        reason = f"{_layer(item)} skipped"
+        reason = f"{layer} skipped"
 
     case = _case_key(item)
-    bucket = "db" if _layer(item) == "DB check" else "api"
+    bucket = "db" if layer == "DB check" else "api"
     passed = bool(report.passed)
-    _case_results.setdefault(case, {"api": [], "db": []})[bucket].append(passed)
+    _case_results.setdefault(case, {"api": [], "db": []})[bucket].append({
+        "passed": passed,
+        "reason": reason,
+    })
 
     _report_meta[item.nodeid] = {
         "case_key": case,
+        "case_order": _case_order(item),
         "description": _description(item),
         "test_data": _extract_test_data(item),
-        "layer": _layer(item),
+        "layer": layer,
         "reason": reason,
-        "final_verdict": _final_verdict(item),
+        "api_check": _bucket_status(case, "api"),
+        "db_check": _bucket_status(case, "db"),
+        "final_verdict": _final_verdict_for_case(case),
+        "diagnosis": _failure_diagnosis(case),
         "sql": _sql_query(item),
     }
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_header(cells):
-    cells.insert(2, "<th>Layer</th>")
-    cells.insert(3, "<th>Final Verdict</th>")
+    cells.insert(2, "<th>Case</th>")
+    cells.insert(3, "<th>Case Order</th>")
     cells.insert(4, "<th>Description</th>")
-    cells.insert(5, "<th>Test Data</th>")
-    cells.insert(6, "<th>Reason</th>")
-    cells.insert(7, "<th>SQL Query</th>")
+    cells.insert(5, "<th>API Check</th>")
+    cells.insert(6, "<th>DB Check</th>")
+    cells.insert(7, "<th>Final Verdict</th>")
+    cells.insert(8, "<th>Failure Diagnosis</th>")
+    cells.insert(9, "<th>Layer</th>")
+    cells.insert(10, "<th>Test Data</th>")
+    cells.insert(11, "<th>Reason</th>")
+    cells.insert(12, "<th>SQL Query</th>")
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_row(report, cells):
     meta = _report_meta.get(report.nodeid, {})
     case = meta.get("case_key")
+    api_check = _bucket_status(case, "api") if case else meta.get("api_check", "N/A")
+    db_check = _bucket_status(case, "db") if case else meta.get("db_check", "N/A")
     verdict = _final_verdict_for_case(case) if case else meta.get("final_verdict", "N/A")
-    cells.insert(2, f"<td>{escape(meta.get('layer', 'N/A'))}</td>")
-    cells.insert(3, f"<td>{escape(verdict)}</td>")
+    diagnosis = _failure_diagnosis(case) if case else meta.get("diagnosis", "N/A")
+    cells.insert(2, f"<td>{escape(meta.get('case_key', 'N/A'))}</td>")
+    cells.insert(3, f"<td>{escape(meta.get('case_order', 'N/A'))}</td>")
     cells.insert(4, f"<td>{escape(meta.get('description', 'N/A'))}</td>")
-    cells.insert(5, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
-    cells.insert(6, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
-    cells.insert(7, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
+    cells.insert(5, f"<td>{escape(api_check)}</td>")
+    cells.insert(6, f"<td>{escape(db_check)}</td>")
+    cells.insert(7, f"<td>{escape(verdict)}</td>")
+    cells.insert(8, f"<td>{escape(diagnosis)}</td>")
+    cells.insert(9, f"<td>{escape(meta.get('layer', 'N/A'))}</td>")
+    cells.insert(10, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
+    cells.insert(11, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
+    cells.insert(12, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
 
 
 @pytest.hookimpl(optionalhook=True)
