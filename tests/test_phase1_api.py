@@ -360,7 +360,10 @@ class TestRow82MissingPropertyNameColumn:
             SCHEMA_UP,
             f"ClientUserId,PropertyValue\n{self.client_user_id},SomeValue",
         )
-        submissions["82"] = {"api_status": self.response.status_code}
+        submissions["82"] = {
+            "user_ids": [self.client_user_id],
+            "api_status": self.response.status_code,
+        }
 
     @pytest.mark.regression
     @pytest.mark.api
@@ -379,7 +382,11 @@ class TestRow83MissingPropertyValueColumn:
             SCHEMA_UP,
             f"ClientUserId,PropertyName\n{self.client_user_id},{self.property_name}",
         )
-        submissions["83"] = {"api_status": self.response.status_code}
+        submissions["83"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
 
     @pytest.mark.regression
     @pytest.mark.api
@@ -570,12 +577,18 @@ class TestRow90UnknownColumnsIgnored:
 class TestRow91DuplicateColumnsRejected:
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
         self.response = api_client.post_csv(
             SCHEMA_UP,
             f"ClientUserId,PropertyName,PropertyValue,PropertyValue\n"
-            f"{unique_user_id},{unique_property_name},Val1,Val2",
+            f"{self.client_user_id},{self.property_name},Val1,Val2",
         )
-        submissions["91"] = {"api_status": self.response.status_code}
+        submissions["91"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
 
     @pytest.mark.regression
     @pytest.mark.api

@@ -32,6 +32,7 @@ from utils import db_client
 _session_run_id: str | None = None
 _report_meta: dict[str, dict] = {}
 _coverage_summary: dict[str, list[int]] = {"present": [], "missing": [], "extra": []}
+_case_results: dict[str, dict[str, list[bool]]] = {}
 
 
 # ── Session run ID ─────────────────────────────────────────────────────────────
@@ -231,6 +232,45 @@ def _description(item: pytest.Item) -> str:
     return item.name
 
 
+def _case_key(item: pytest.Item) -> str:
+    row = _extract_row_number(item.nodeid)
+    if row is not None:
+        return f"row{row}"
+    class_doc = (getattr(item.cls, "__doc__", "") or "").strip()
+    tc = re.search(r"\bTC-[A-Z]+-\d+\b", class_doc, flags=re.IGNORECASE)
+    if tc:
+        return tc.group(0).upper()
+    return item.nodeid
+
+
+def _final_verdict(item: pytest.Item) -> str:
+    """
+    DB is the source of truth whenever a case has DB checks.
+    API-only cases fall back to API outcomes.
+    """
+    case = _case_key(item)
+    outcomes = _case_results.get(case, {})
+    db = outcomes.get("db", [])
+    api = outcomes.get("api", [])
+
+    if db:
+        return "FAIL" if any(not ok for ok in db) else "PASS"
+    if api:
+        return "FAIL" if any(not ok for ok in api) else "PASS"
+    return "N/A"
+
+
+def _final_verdict_for_case(case: str) -> str:
+    outcomes = _case_results.get(case, {})
+    db = outcomes.get("db", [])
+    api = outcomes.get("api", [])
+    if db:
+        return "FAIL" if any(not ok for ok in db) else "PASS"
+    if api:
+        return "FAIL" if any(not ok for ok in api) else "PASS"
+    return "N/A"
+
+
 def _extract_test_data(item: pytest.Item) -> str:
     inst = getattr(item, "instance", None)
     if not inst:
@@ -310,11 +350,18 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     else:
         reason = f"{_layer(item)} skipped"
 
+    case = _case_key(item)
+    bucket = "db" if _layer(item) == "DB check" else "api"
+    passed = bool(report.passed)
+    _case_results.setdefault(case, {"api": [], "db": []})[bucket].append(passed)
+
     _report_meta[item.nodeid] = {
+        "case_key": case,
         "description": _description(item),
         "test_data": _extract_test_data(item),
         "layer": _layer(item),
         "reason": reason,
+        "final_verdict": _final_verdict(item),
         "sql": _sql_query(item),
     }
 
@@ -322,20 +369,24 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_header(cells):
     cells.insert(2, "<th>Layer</th>")
-    cells.insert(3, "<th>Description</th>")
-    cells.insert(4, "<th>Test Data</th>")
-    cells.insert(5, "<th>Reason</th>")
-    cells.insert(6, "<th>SQL Query</th>")
+    cells.insert(3, "<th>Final Verdict</th>")
+    cells.insert(4, "<th>Description</th>")
+    cells.insert(5, "<th>Test Data</th>")
+    cells.insert(6, "<th>Reason</th>")
+    cells.insert(7, "<th>SQL Query</th>")
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_row(report, cells):
     meta = _report_meta.get(report.nodeid, {})
+    case = meta.get("case_key")
+    verdict = _final_verdict_for_case(case) if case else meta.get("final_verdict", "N/A")
     cells.insert(2, f"<td>{escape(meta.get('layer', 'N/A'))}</td>")
-    cells.insert(3, f"<td>{escape(meta.get('description', 'N/A'))}</td>")
-    cells.insert(4, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
-    cells.insert(5, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
-    cells.insert(6, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
+    cells.insert(3, f"<td>{escape(verdict)}</td>")
+    cells.insert(4, f"<td>{escape(meta.get('description', 'N/A'))}</td>")
+    cells.insert(5, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
+    cells.insert(6, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
+    cells.insert(7, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
 
 
 @pytest.hookimpl(optionalhook=True)

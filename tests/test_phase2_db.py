@@ -221,7 +221,50 @@ class TestRow80DB:
         )
 
 
-# Rows 81–83 are API-only (expect 400) — no DB check needed.
+# Negative-path DB assertions:
+# if these payloads are invalid, no user_properties rows should be inserted.
+
+class TestRow82DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row82_no_db_insert_when_property_name_missing(self, db_snapshot, submissions):
+        sub = submissions.get("82", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 82] Missing user_id from Phase-1 submission metadata"
+        rows = _up_rows(db_snapshot, uid)
+        assert not rows, (
+            f"[Row 82] Expected no user_properties row for invalid payload (missing PropertyName), "
+            f"but found: {rows}"
+        )
+
+
+class TestRow83DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row83_no_db_insert_when_property_value_missing(self, db_snapshot, submissions):
+        sub = submissions.get("83", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 83] Missing user_id from Phase-1 submission metadata"
+        rows = _up_rows(db_snapshot, uid)
+        assert not rows, (
+            f"[Row 83] Expected no user_properties row for invalid payload (missing PropertyValue), "
+            f"but found: {rows}"
+        )
+
+
+class TestRow91DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row91_no_db_insert_when_duplicate_columns(self, db_snapshot, submissions):
+        sub = submissions.get("91", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 91] Missing user_id from Phase-1 submission metadata"
+        rows = _up_rows(db_snapshot, uid)
+        assert not rows, (
+            f"[Row 91] Expected no user_properties row for invalid payload (duplicate columns), "
+            f"but found: {rows}"
+        )
+
 
 class TestRow84DB:
     @pytest.mark.regression
