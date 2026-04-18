@@ -303,11 +303,11 @@ def _failure_diagnosis(case: str) -> str:
 def _case_order(item: pytest.Item) -> str:
     row = _extract_row_number(item.nodeid)
     if row is not None:
-        return str(row)
+        return f"{row:03d}"
     class_doc = (getattr(item.cls, "__doc__", "") or "").strip().upper()
     tc = re.search(r"\bTC-[A-Z]+-(\d+)\b", class_doc)
     if tc:
-        return tc.group(1)
+        return f"{int(tc.group(1)):03d}"
     return "N/A"
 
 
