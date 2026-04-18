@@ -1,0 +1,17 @@
+# ─── InSitu QA Automation – Python Dependencies ──────────────────────────────
+# Install:  pip install -r requirements.txt
+
+# HTTP client
+requests==2.31.0
+
+# PostgreSQL driver
+psycopg2-binary==2.9.9
+
+# Test runner
+pytest==8.1.1
+
+# HTML report plugin
+pytest-html==4.1.1
+
+# Nice test output (optional but handy)
+pytest-sugar==1.0.0

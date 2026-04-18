@@ -1,0 +1,76 @@
+# =========================
+
+# Python cache & bytecode
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# =========================
+
+# Virtual environments
+
+# =========================
+
+venv/
+.env/
+.env.*
+
+# =========================
+
+# Pytest & test artifacts
+
+# =========================
+
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Test reports (auto-generated)
+
+reports/
+*.html
+*.xml
+*.log
+
+# =========================
+
+# Build / packaging
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+
+# =========================
+
+# Databases
+
+# =========================
+
+*.sqlite3
+*.db
+
+# =========================
+
+# IDE / Editor
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+
+# =========================
+
+# OS junk
+
+# =========================
+
+.DS_Store
+Thumbs.db
