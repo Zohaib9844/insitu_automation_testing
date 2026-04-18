@@ -383,6 +383,238 @@ class TestRow97DB:
         )
 
 
+class TestRow98DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row98_no_duplicate_rows(self, db_snapshot, submissions):
+        sub = submissions.get("98", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 98] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 98] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow99DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row99_single_row_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("99", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 99] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 99] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow100DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row100_double_value_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("100", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 100] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 100] Property not found"
+        assert match[0].get("property_value_double") is not None, "[Row 100] property_value_double is NULL"
+
+
+class TestRow101DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row101_double_preserved_text_not_set(self, db_snapshot, submissions):
+        sub = submissions.get("101", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 101] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 101] Property not found"
+        row = match[0]
+        assert row.get("property_value_double") is not None, "[Row 101] property_value_double should be preserved"
+        assert row.get("property_value") != "SomeTextValue", "[Row 101] Text override should not be applied"
+
+
+class TestRow102DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row102_no_duplicate_rows(self, db_snapshot, submissions):
+        sub = submissions.get("102", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 102] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 102] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow103DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row103_single_row_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("103", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 103] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 103] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow104DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row104_date_value_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("104", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 104] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 104] Property not found"
+        assert match[0].get("property_value_date") is not None, "[Row 104] property_value_date is NULL"
+
+
+class TestRow105DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row105_date_preserved_text_not_set(self, db_snapshot, submissions):
+        sub = submissions.get("105", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 105] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 105] Property not found"
+        row = match[0]
+        assert row.get("property_value_date") is not None, "[Row 105] property_value_date should be preserved"
+        assert row.get("property_value") != "SomeTextValue", "[Row 105] Text override should not be applied"
+
+
+class TestRow106DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row106_no_duplicate_rows(self, db_snapshot, submissions):
+        sub = submissions.get("106", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 106] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 106] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow107DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row107_single_row_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("107", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 107] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 107] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow108DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row108_currency_value_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("108", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 108] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 108] Property not found"
+        assert match[0].get("property_value_currency") is not None, "[Row 108] property_value_currency is NULL"
+
+
+class TestRow109DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row109_currency_preserved_text_not_set(self, db_snapshot, submissions):
+        sub = submissions.get("109", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 109] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 109] Property not found"
+        row = match[0]
+        assert row.get("property_value_currency") is not None, "[Row 109] property_value_currency should be preserved"
+        assert row.get("property_value") != "SomeTextValue", "[Row 109] Text override should not be applied"
+
+
+class TestRow110DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row110_no_duplicate_rows(self, db_snapshot, submissions):
+        sub = submissions.get("110", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 110] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 110] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow111DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row111_single_row_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("111", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 111] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 111] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow112DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row112_bool_value_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("112", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 112] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 112] Property not found"
+        assert match[0].get("property_value_bool") is not None, "[Row 112] property_value_bool is NULL"
+
+
+class TestRow113DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row113_bool_preserved_text_not_set(self, db_snapshot, submissions):
+        sub = submissions.get("113", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 113] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert match, "[Row 113] Property not found"
+        row = match[0]
+        assert row.get("property_value_bool") is not None, "[Row 113] property_value_bool should be preserved"
+        assert row.get("property_value") != "SomeTextValue", "[Row 113] Text override should not be applied"
+
+
+class TestRow114DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row114_no_duplicate_rows(self, db_snapshot, submissions):
+        sub = submissions.get("114", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 114] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 114] Expected <=1 row for property, found {len(match)}"
+
+
+class TestRow115DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row115_single_row_in_db(self, db_snapshot, submissions):
+        sub = submissions.get("115", {})
+        uid = sub.get("user_ids", [None])[0]
+        rows = _up_rows(db_snapshot, uid)
+        assert rows, f"[Row 115] No user_properties row for '{uid}'"
+        match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
+        assert len(match) <= 1, f"[Row 115] Expected <=1 row for property, found {len(match)}"
+
+
 class TestRow116DB:
     @pytest.mark.regression
     @pytest.mark.db

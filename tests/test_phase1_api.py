@@ -740,6 +740,464 @@ class TestRow97TypeConflictIntVsText:
         )
 
 
+class TestRow98NoDuplicatePropertyValueInt:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueInt\n"
+            f"{self.client_user_id},{self.property_name},40000\n"
+            f"{self.client_user_id},{self.property_name},40000\n"
+            f"{self.client_user_id},{self.property_name},20000",
+        )
+        submissions["98"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row98_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 98] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow99CaseInsensitiveDedupInt:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueInt\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,   40000\n"
+            f"{self.client_user_id},{self.property_name},40000\n"
+            f"{self.client_user_id},{self.property_name},20000",
+        )
+        submissions["99"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row99_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 99] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow100PropertyValueDouble:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDouble\n"
+            f"{self.client_user_id},{self.property_name},99.5",
+        )
+        submissions["100"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row100_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 100] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow101TypeConflictDoubleVsText:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDouble\n{self.client_user_id},{self.property_name},99.5",
+        )
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n{self.client_user_id},{self.property_name},SomeTextValue",
+        )
+        submissions["101"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row101_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 101] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow102NoDuplicatePropertyValueDouble:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDouble\n"
+            f"{self.client_user_id},{self.property_name},99.5\n"
+            f"{self.client_user_id},{self.property_name},99.5\n"
+            f"{self.client_user_id},{self.property_name},1.23",
+        )
+        submissions["102"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row102_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 102] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow103CaseInsensitiveDedupDouble:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDouble\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,   99.5\n"
+            f"{self.client_user_id},{self.property_name},99.5\n"
+            f"{self.client_user_id},{self.property_name},1.23",
+        )
+        submissions["103"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row103_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 103] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow104PropertyValueDate:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDate\n"
+            f"{self.client_user_id},{self.property_name},2023-02-03",
+        )
+        submissions["104"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row104_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 104] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow105TypeConflictDateVsText:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDate\n{self.client_user_id},{self.property_name},2023-02-03",
+        )
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n{self.client_user_id},{self.property_name},SomeTextValue",
+        )
+        submissions["105"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row105_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 105] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow106NoDuplicatePropertyValueDate:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDate\n"
+            f"{self.client_user_id},{self.property_name},2023-02-03\n"
+            f"{self.client_user_id},{self.property_name},2023-02-03",
+        )
+        submissions["106"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row106_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 106] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow107CaseInsensitiveDedupDate:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueDate\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,   2023-02-03\n"
+            f"{self.client_user_id},{self.property_name},2023-02-03",
+        )
+        submissions["107"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row107_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 107] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow108PropertyValueCurrency:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueCurrency\n"
+            f"{self.client_user_id},{self.property_name},2000.00",
+        )
+        submissions["108"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row108_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 108] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow109TypeConflictCurrencyVsText:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueCurrency\n{self.client_user_id},{self.property_name},2000.00",
+        )
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n{self.client_user_id},{self.property_name},SomeTextValue",
+        )
+        submissions["109"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row109_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 109] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow110NoDuplicatePropertyValueCurrency:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueCurrency\n"
+            f"{self.client_user_id},{self.property_name},2000.00\n"
+            f"{self.client_user_id},{self.property_name},2000.00",
+        )
+        submissions["110"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row110_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 110] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow111CaseInsensitiveDedupCurrency:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueCurrency\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,   2000.00\n"
+            f"{self.client_user_id},{self.property_name},2000.00",
+        )
+        submissions["111"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row111_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 111] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow112PropertyValueBool:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueBool\n"
+            f"{self.client_user_id},{self.property_name},true",
+        )
+        submissions["112"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row112_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 112] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow113TypeConflictBoolVsText:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueBool\n{self.client_user_id},{self.property_name},true",
+        )
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n{self.client_user_id},{self.property_name},SomeTextValue",
+        )
+        submissions["113"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row113_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 113] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow114NoDuplicatePropertyValueBool:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueBool\n"
+            f"{self.client_user_id},{self.property_name},true\n"
+            f"{self.client_user_id},{self.property_name},true",
+        )
+        submissions["114"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row114_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 114] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+class TestRow115CaseInsensitiveDedupBool:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name = unique_property_name
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueBool\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,   true\n"
+            f"{self.client_user_id},{self.property_name},true",
+        )
+        submissions["115"] = {
+            "user_ids": [self.client_user_id],
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row115_api_returns_200(self):
+        assert self.response.status_code == 200, (
+            f"[Row 115] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
 class TestRow116PropertyValueJson:
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):

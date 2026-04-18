@@ -18,6 +18,8 @@ DB queries: 3 bulk SELECTs per session  (was N_tests SELECTs)
 import sys
 import time
 import uuid
+import re
+from html import escape
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,8 @@ import config
 from utils import db_client
 
 _session_run_id: str | None = None
+_report_meta: dict[str, dict] = {}
+_coverage_summary: dict[str, list[int]] = {"present": [], "missing": [], "extra": []}
 
 
 # ── Session run ID ─────────────────────────────────────────────────────────────
@@ -109,13 +113,13 @@ def db_snapshot(run_id: str) -> dict:
 
 # ── Markers ────────────────────────────────────────────────────────────────────
 
-def pytest_configure(config_obj):
-    config_obj.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
-    config_obj.addinivalue_line("markers", "regression: Regression tests (rows 76-119)")
-    config_obj.addinivalue_line("markers", "signals:    Tests for the signals schema")
-    config_obj.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
-    config_obj.addinivalue_line("markers", "api:        Phase-1 API-only tests")
-    config_obj.addinivalue_line("markers", "db:         Phase-2 DB-only tests")
+def pytest_configure(config):
+    config.addinivalue_line("markers", "happy_path: Happy-path / smoke tests")
+    config.addinivalue_line("markers", "regression: Regression tests (rows 76-119)")
+    config.addinivalue_line("markers", "signals:    Tests for the signals schema")
+    config.addinivalue_line("markers", "userprops:  Tests for the userproperties schema")
+    config.addinivalue_line("markers", "api:        Phase-1 API-only tests")
+    config.addinivalue_line("markers", "db:         Phase-2 DB-only tests")
 
 
 # ── CLI helpers ────────────────────────────────────────────────────────────────
@@ -196,3 +200,157 @@ def pytest_sessionfinish(session, exitstatus):
     else:
         print(f"  Kept. Clean later: pytest --cleanup-run {_session_run_id}")
     print()
+
+
+# ── Coverage + HTML report enrichment ──────────────────────────────────────────
+
+def _extract_row_number(nodeid: str) -> int | None:
+    m = re.search(r"row(\d+)", nodeid.lower())
+    return int(m.group(1)) if m else None
+
+
+def _layer(item: pytest.Item) -> str:
+    if item.get_closest_marker("db"):
+        return "DB check"
+    if item.get_closest_marker("api"):
+        return "API check"
+    if "test_phase2_db.py" in item.nodeid:
+        return "DB check"
+    if "test_phase1_api.py" in item.nodeid:
+        return "API check"
+    return "API+DB check"
+
+
+def _description(item: pytest.Item) -> str:
+    doc = (getattr(item.function, "__doc__", "") or "").strip()
+    if doc:
+        return " ".join(doc.split())
+    class_doc = (getattr(item.cls, "__doc__", "") or "").strip()
+    if class_doc:
+        return " ".join(class_doc.split())
+    return item.name
+
+
+def _extract_test_data(item: pytest.Item) -> str:
+    inst = getattr(item, "instance", None)
+    if not inst:
+        return "N/A"
+
+    response = getattr(inst, "response", None)
+    request = getattr(response, "request", None)
+    body = getattr(request, "body", None)
+    if body is not None:
+        if isinstance(body, bytes):
+            body = body.decode("utf-8", errors="replace")
+        compact = " ".join(str(body).split())
+        return compact[:500] + ("…" if len(compact) > 500 else "")
+
+    keys = [
+        "client_user_id", "user_id_1", "user_id_2",
+        "property_name", "signal_name",
+    ]
+    values = [f"{k}={getattr(inst, k)}" for k in keys if hasattr(inst, k)]
+    return ", ".join(values) if values else "N/A"
+
+
+def _sql_query(item: pytest.Item) -> str:
+    inst = getattr(item, "instance", None)
+    user_hint = None
+    if inst:
+        user_hint = getattr(inst, "client_user_id", None) or getattr(inst, "user_id_1", None)
+
+    if item.get_closest_marker("signals"):
+        if item.get_closest_marker("db"):
+            uid = user_hint or "<client_user_id>"
+            return (
+                f"SELECT * FROM profiles.client_users_data WHERE LOWER(client_user_id)=LOWER('{uid}'); "
+                f"SELECT * FROM profiles.client_user_mapping WHERE LOWER(client_user_id)=LOWER('{uid}');"
+            )
+        return "N/A (API assertion)"
+
+    if item.get_closest_marker("userprops"):
+        if item.get_closest_marker("db"):
+            uid = user_hint or "<client_user_id>"
+            return (
+                "SELECT up.* FROM profiles.user_properties up "
+                "JOIN profiles.client_user_mapping cum ON cum.da_user_id = up.da_user_id "
+                f"WHERE LOWER(cum.client_user_id)=LOWER('{uid}');"
+            )
+        return "N/A (API assertion)"
+
+    return "N/A"
+
+
+def pytest_collection_finish(session: pytest.Session):
+    present = sorted({
+        row
+        for item in session.items
+        for row in [_extract_row_number(item.nodeid)]
+        if row is not None
+    })
+    expected = set(range(76, 120))
+    missing = sorted(expected - set(present))
+    extra = sorted(set(present) - expected)
+    _coverage_summary["present"] = present
+    _coverage_summary["missing"] = missing
+    _coverage_summary["extra"] = extra
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call":
+        return
+
+    if report.failed:
+        reason = f"{_layer(item)} failed"
+    elif report.passed:
+        reason = f"{_layer(item)} passed"
+    else:
+        reason = f"{_layer(item)} skipped"
+
+    _report_meta[item.nodeid] = {
+        "description": _description(item),
+        "test_data": _extract_test_data(item),
+        "layer": _layer(item),
+        "reason": reason,
+        "sql": _sql_query(item),
+    }
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_html_results_table_header(cells):
+    cells.insert(2, "<th>Layer</th>")
+    cells.insert(3, "<th>Description</th>")
+    cells.insert(4, "<th>Test Data</th>")
+    cells.insert(5, "<th>Reason</th>")
+    cells.insert(6, "<th>SQL Query</th>")
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_html_results_table_row(report, cells):
+    meta = _report_meta.get(report.nodeid, {})
+    cells.insert(2, f"<td>{escape(meta.get('layer', 'N/A'))}</td>")
+    cells.insert(3, f"<td>{escape(meta.get('description', 'N/A'))}</td>")
+    cells.insert(4, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
+    cells.insert(5, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
+    cells.insert(6, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_html_results_summary(prefix, summary, postfix):
+    present = _coverage_summary.get("present", [])
+    missing = _coverage_summary.get("missing", [])
+    extra = _coverage_summary.get("extra", [])
+
+    prefix.extend([
+        "<h3>Excel Coverage Audit (Rows 76–119)</h3>",
+        f"<p>Rows present in collected suite: {len(present)}</p>",
+        "<p>Missing rows: "
+        + (", ".join(map(str, missing)) if missing else "None")
+        + "</p>",
+        "<p>Out-of-range rows found: "
+        + (", ".join(map(str, extra)) if extra else "None")
+        + "</p>",
+    ])
