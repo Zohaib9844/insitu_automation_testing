@@ -38,6 +38,15 @@ def _mapping_rows(db_snapshot, client_user_id: str) -> list[dict]:
     return db_snapshot["client_user_mapping"].get(client_user_id.lower(), [])
 
 
+def _all_up_rows(db_snapshot) -> list[dict]:
+    """Flatten all user_properties rows from the cached snapshot."""
+    return [
+        row
+        for rows in db_snapshot["user_properties"].values()
+        for row in rows
+    ]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  HAPPY PATH DB CHECKS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -224,6 +233,23 @@ class TestRow80DB:
 # Negative-path DB assertions:
 # if these payloads are invalid, no user_properties rows should be inserted.
 
+class TestRow81DB:
+    @pytest.mark.regression
+    @pytest.mark.db
+    def test_row81_no_db_insert_when_client_user_id_column_missing(self, db_snapshot, submissions):
+        sub = submissions.get("81", {})
+        prop = (sub.get("property_name") or "").lower()
+        assert prop, "[Row 81] Missing property_name from Phase-1 submission metadata"
+        matches = [
+            r for r in _all_up_rows(db_snapshot)
+            if (r.get("property_name", "") or "").lower() == prop
+        ]
+        assert not matches, (
+            "[Row 81] Expected no user_properties row for invalid payload "
+            f"(missing ClientUserId column), but found: {matches}"
+        )
+
+
 class TestRow82DB:
     @pytest.mark.regression
     @pytest.mark.db
@@ -273,6 +299,9 @@ class TestRow84DB:
         sub = submissions.get("84", {})
         uid = sub.get("user_ids", [None])[0]
         assert _up_rows(db_snapshot, uid), f"[Row 84] Valid row for '{uid}' not in user_properties"
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, f"[Row 84] Invalid user '{bad_uid}' should not be inserted: {bad_rows}"
 
 
 class TestRow85DB:
@@ -282,6 +311,9 @@ class TestRow85DB:
         sub = submissions.get("85", {})
         uid = sub.get("user_ids", [None])[0]
         assert _up_rows(db_snapshot, uid), f"[Row 85] Valid row for '{uid}' not in user_properties"
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, f"[Row 85] Invalid user '{bad_uid}' should not be inserted: {bad_rows}"
 
 
 class TestRow86DB:
@@ -291,6 +323,9 @@ class TestRow86DB:
         sub = submissions.get("86", {})
         uid = sub.get("user_ids", [None])[0]
         assert _up_rows(db_snapshot, uid), f"[Row 86] Valid row for '{uid}' not in user_properties"
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, f"[Row 86] Invalid user '{bad_uid}' should not be inserted: {bad_rows}"
 
 
 class TestRow87DB:
@@ -300,6 +335,9 @@ class TestRow87DB:
         sub = submissions.get("87", {})
         uid = sub.get("user_ids", [None])[0]
         assert _up_rows(db_snapshot, uid), f"[Row 87] Valid row for '{uid}' not in user_properties"
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, f"[Row 87] Invalid user '{bad_uid}' should not be inserted: {bad_rows}"
 
 
 class TestRow88DB:
@@ -309,6 +347,9 @@ class TestRow88DB:
         sub = submissions.get("88", {})
         uid = sub.get("user_ids", [None])[0]
         assert _up_rows(db_snapshot, uid), f"[Row 88] Valid row for '{uid}' not in user_properties"
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, f"[Row 88] Invalid user '{bad_uid}' should not be inserted: {bad_rows}"
 
 
 class TestRow89DB:

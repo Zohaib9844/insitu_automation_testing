@@ -341,7 +341,10 @@ class TestRow81MissingClientUserIdColumn:
             SCHEMA_UP,
             f"PropertyName,PropertyValue\n{self.property_name},SomeValue",
         )
-        submissions["81"] = {"api_status": self.response.status_code}
+        submissions["81"] = {
+            "property_name": self.property_name,
+            "api_status": self.response.status_code,
+        }
 
     @pytest.mark.regression
     @pytest.mark.api
@@ -412,6 +415,7 @@ class TestRow84MissingClientUserIdValue:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": [""]},
         }
 
     @pytest.mark.regression
@@ -437,6 +441,7 @@ class TestRow85EmptyNullClientUserIdValue:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": ["NULL"]},
         }
 
     @pytest.mark.regression
@@ -462,6 +467,7 @@ class TestRow86MissingPropertyNameValue:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": [unique_user_id]},
         }
 
     @pytest.mark.regression
@@ -487,6 +493,7 @@ class TestRow87EmptyNullPropertyNameValue:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": [unique_user_id]},
         }
 
     @pytest.mark.regression
@@ -512,6 +519,7 @@ class TestRow88MissingPropertyValueRowSkipped:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": [unique_user_id]},
         }
 
     @pytest.mark.regression
