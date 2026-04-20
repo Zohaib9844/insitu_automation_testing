@@ -123,6 +123,17 @@ def get_bulk_snapshot(run_id: str) -> dict:
         (prefix,),
     )
 
+    # ── 4. raw_signals ─────────────────────────────────────────────────────────
+    # raw_signals has no client_user_id column, so it is returned as a flat list.
+    # Tests that need to verify signal ingestion (rows 19, 47) check that the
+    # list is non-empty, confirming the table received data during this run.
+    rs_rows = _fetch(
+        """
+        SELECT * FROM profiles.raw_signals
+        ORDER  BY id
+        """,
+    )
+
     # ── Build lookup dicts keyed by lowercase client_user_id ──────────────────
     def group_by_user(rows: list[dict], id_field: str = "client_user_id") -> dict:
         result: dict = {}
@@ -132,9 +143,10 @@ def get_bulk_snapshot(run_id: str) -> dict:
         return result
 
     return {
-        "user_properties":    group_by_user(up_rows,  "_client_user_id"),
-        "client_users_data":  group_by_user(cud_rows, "client_user_id"),
+        "user_properties":     group_by_user(up_rows,  "_client_user_id"),
+        "client_users_data":   group_by_user(cud_rows, "client_user_id"),
         "client_user_mapping": group_by_user(cum_rows, "client_user_id"),
+        "raw_signals":         rs_rows,   # flat list — not keyed by user
     }
 
 
