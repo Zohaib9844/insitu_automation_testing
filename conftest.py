@@ -46,10 +46,13 @@ def run_id() -> str:
 
 # ── Per-test unique identifiers ────────────────────────────────────────────────
 
+_user_counter = 0
+
 @pytest.fixture
 def unique_user_id(run_id) -> str:
-    return f"AT_USER_{run_id}_{int(time.time())}"
-
+    global _user_counter
+    _user_counter += 1
+    return f"AT_USER_{run_id}_{_user_counter:04d}"
 
 @pytest.fixture
 def unique_signal_name(run_id) -> str:
@@ -247,11 +250,9 @@ def _bucket_status(case: str, bucket: str) -> str:
     entries = _case_results.get(case, {}).get(bucket, [])
     if not entries:
         return "N/A"
-    if any(not bool(e.get("passed")) for e in entries):
+    if any(not e.get("passed") for e in entries):
         return "FAIL"
-    if any(bool(e.get("passed")) for e in entries):
-        return "PASS"
-    return "SKIP"
+    return "PASS"
 
 
 def _bucket_reason(case: str, bucket: str) -> str:
@@ -268,28 +269,29 @@ def _bucket_reason(case: str, bucket: str) -> str:
 def _final_verdict_for_case(case: str) -> str:
     db = _bucket_status(case, "db")
     api = _bucket_status(case, "api")
-    if db != "N/A":
-        return db
-    if api != "N/A":
-        return api
+    # Any failure in any bucket = case fails
+    if "FAIL" in (db, api):
+        return "FAIL"
+    if "PASS" in (db, api):
+        return "PASS"
     return "N/A"
 
 
 def _failure_diagnosis(case: str) -> str:
     api_status = _bucket_status(case, "api")
-    db_status = _bucket_status(case, "db")
+    db_status  = _bucket_status(case, "db")
     api_reason = _bucket_reason(case, "api")
-    db_reason = _bucket_reason(case, "db")
+    db_reason  = _bucket_reason(case, "db")
 
-    if db_status == "FAIL" and api_status == "PASS":
-        return f"API passed, DB failed — {db_reason}"
-    if db_status == "PASS" and api_status == "FAIL":
-        return f"API failed, DB passed — {api_reason}"
     if db_status == "FAIL" and api_status == "FAIL":
         return f"Both failed — API: {api_reason} | DB: {db_reason}"
-    if db_status == "FAIL":
+    if api_status == "FAIL" and db_status == "PASS":
+        return f"API failed, DB incidentally passed — {api_reason}"
+    if db_status == "FAIL" and api_status == "PASS":          # ← was missing
+        return f"API passed, DB failed — {db_reason}"
+    if db_status == "FAIL":                                   # api is N/A
         return f"DB failed — {db_reason}"
-    if api_status == "FAIL":
+    if api_status == "FAIL":                                  # db is N/A
         return f"API failed — {api_reason}"
     if db_status == "PASS" and api_status == "PASS":
         return "API and DB checks passed"
@@ -297,7 +299,7 @@ def _failure_diagnosis(case: str) -> str:
         return "DB checks passed (no API check in this case)"
     if api_status == "PASS" and db_status == "N/A":
         return "API checks passed (API-only case)"
-    return "N/A"
+    return "N/A" 
 
 
 def _case_order(item: pytest.Item) -> str:
@@ -361,6 +363,10 @@ def _sql_query(item: pytest.Item) -> str:
     return "N/A"
 
 
+# ── Rows covered by each suite ────────────────────────────────────────────────
+_SIGNAL_ROWS    = set(range(5, 61)) - {18, 22, 31, 42, 50}   # practical skips
+_UP_ROWS        = set(range(76, 120))
+
 def pytest_collection_finish(session: pytest.Session):
     present = sorted({
         row
@@ -368,13 +374,21 @@ def pytest_collection_finish(session: pytest.Session):
         for row in [_extract_row_number(item.nodeid)]
         if row is not None
     })
-    expected = set(range(76, 120))
-    missing = sorted(expected - set(present))
-    extra = sorted(set(present) - expected)
+    present_set = set(present)
+
+    # Work out expected based on which test files were collected
+    collected_files = {item.fspath.basename for item in session.items}
+    expected: set[int] = set()
+    if any("signal" in f for f in collected_files):
+        expected |= _SIGNAL_ROWS
+    if any("phase1_api" in f or "phase2_db" in f for f in collected_files):
+        expected |= _UP_ROWS
+
+    missing = sorted(expected - present_set)
+    extra   = sorted(present_set - expected)
     _coverage_summary["present"] = present
     _coverage_summary["missing"] = missing
-    _coverage_summary["extra"] = extra
-
+    _coverage_summary["extra"]   = extra
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
@@ -402,17 +416,15 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     })
 
     _report_meta[item.nodeid] = {
-        "case_key": case,
-        "case_order": _case_order(item),
+        "case_key":    case,
+        "case_order":  _case_order(item),
         "description": _description(item),
-        "test_data": _extract_test_data(item),
-        "layer": layer,
-        "reason": reason,
-        "api_check": _bucket_status(case, "api"),
-        "db_check": _bucket_status(case, "db"),
-        "final_verdict": _final_verdict_for_case(case),
-        "diagnosis": _failure_diagnosis(case),
-        "sql": _sql_query(item),
+        "test_data":   _extract_test_data(item),
+        "layer":       layer,
+        "reason":      reason,
+        "sql":         _sql_query(item),
+        # ← removed: api_check, db_check, final_verdict, diagnosis
+        #    these are always recomputed live in pytest_html_results_table_row
     }
 
 
@@ -459,12 +471,18 @@ def pytest_html_results_summary(prefix, summary, postfix):
     extra = _coverage_summary.get("extra", [])
 
     prefix.extend([
-        "<h3>Excel Coverage Audit (Rows 76–119)</h3>",
-        f"<p>Rows present in collected suite: {len(present)}</p>",
+        "<h3>Excel Coverage Audit</h3>",
+        "<p><b>Signal rows (5–60):</b> "
+        + str(sorted(_SIGNAL_ROWS & set(_coverage_summary.get('present', []))))
+        + "</p>",
+        "<p><b>User Properties rows (76–119):</b> "
+        + str(sorted(_UP_ROWS & set(_coverage_summary.get('present', []))))
+        + "</p>",
+        f"<p>Total rows present in collected suite: {len(_coverage_summary.get('present', []))}</p>",
         "<p>Missing rows: "
-        + (", ".join(map(str, missing)) if missing else "None")
+        + (", ".join(map(str, _coverage_summary.get("missing", []))) or "None")
         + "</p>",
         "<p>Out-of-range rows found: "
-        + (", ".join(map(str, extra)) if extra else "None")
+        + (", ".join(map(str, _coverage_summary.get("extra", []))) or "None")
         + "</p>",
     ])
