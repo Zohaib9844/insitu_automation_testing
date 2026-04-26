@@ -107,10 +107,12 @@ def db_snapshot(run_id: str) -> dict:
     time.sleep(config.DB_PROPAGATION_DELAY)
     print(f"[db_snapshot] Bulk-querying run {run_id} …")
     snapshot = db_client.get_bulk_snapshot(run_id)
-    total = sum(
-        sum(len(v) for v in table.values())
-        for table in snapshot.values()
-    )
+    total = 0
+    for key, table in snapshot.items():
+        if isinstance(table, list):          # raw_signals — flat list
+            total += len(table)
+        else:                                # all others — dict of lists
+            total += sum(len(v) for v in table.values())
     print(f"[db_snapshot] Done — {total} rows cached. All DB tests are now instant.\n")
     return snapshot
 
@@ -364,7 +366,7 @@ def _sql_query(item: pytest.Item) -> str:
 
 
 # ── Rows covered by each suite ────────────────────────────────────────────────
-_SIGNAL_ROWS    = set(range(5, 61)) - {18, 22, 31, 42, 50}   # practical skips
+_SIGNAL_ROWS    = set(range(5, 75)) - {18, 22, 31, 42, 50, 70}   # practical skips; 70 = >1 GB manual
 _UP_ROWS        = set(range(76, 120))
 
 def pytest_collection_finish(session: pytest.Session):

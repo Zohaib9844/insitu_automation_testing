@@ -58,6 +58,7 @@ SKIPPED rows (manual or known-bug — noted inline):
   Row 31 : typo in column name     (ambiguous expected behaviour)
   Row 42 : > 1 GB file             (manual only)
   Row 50 : projectName JSON        (known bug — Azure DevOps ticket)
+  Row 70 : > 1 GB JSON file (manual only)
 
 ──────────────────────────────────────────────────────────────────────────────
 Run just Phase 1 (API only):
@@ -1641,4 +1642,540 @@ class TestSigRow60JsonMisspelledOptionalFields:
         assert self.response.status_code == 200, (
             f"[Row 60] Expected 200 (misspelled optional fields ignored), "
             f"got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 61  —  JSON array: element with missing ClientUserId key → skipped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow61JsonMissingClientUserIdInElement:
+    """Excel Row 61: JSON array where one element has no ClientUserId key →
+    that element is skipped; valid elements are ingested → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good1  = f"{unique_user_id}_G1"
+        self.user_good2  = f"{unique_user_id}_G2"
+        self.signal_name = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good1, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            # missing ClientUserId key entirely
+            {"SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_good2, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row61"] = {
+            "user_ids":    [self.user_good1, self.user_good2],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"absent_user_ids": []},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow61_element_with_missing_client_user_id_key_skipped_returns_200(self):
+        """Row 61: JSON element with missing ClientUserId key skipped; others ingested → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 61] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 62  —  JSON array: element with empty or null ClientUserId → skipped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow62JsonEmptyNullClientUserIdInElement:
+    """Excel Row 62: JSON array where elements have empty-string or null ClientUserId →
+    those elements are skipped; valid elements are ingested → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good   = f"{unique_user_id}_GOOD"
+        self.user_empty  = f"{unique_user_id}_EMPTY"   # will be absent from DB
+        self.user_null   = f"{unique_user_id}_NULL"    # will be absent from DB
+        self.signal_name = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": "",   "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": None, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row62"] = {
+            "user_ids":    [self.user_good],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"absent_user_ids": ["", None]},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow62_empty_null_client_user_id_skipped_returns_200(self):
+        """Row 62: Elements with empty/null ClientUserId skipped → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 62] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 63  —  JSON array: element with missing SignalName key → skipped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow63JsonMissingSignalNameInElement:
+    """Excel Row 63: JSON array where one element has no SignalName key →
+    that element is skipped; valid elements are ingested → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good = f"{unique_user_id}_GOOD"
+        self.user_bad  = f"{unique_user_id}_BAD"
+        self.signal_name = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            # missing SignalName key entirely
+            {"ClientUserId": self.user_bad, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row63"] = {
+            "user_ids":    [self.user_good],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"absent_user_ids": [self.user_bad]},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow63_element_with_missing_signal_name_key_skipped_returns_200(self):
+        """Row 63: JSON element with missing SignalName key skipped; others ingested → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 63] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 64  —  JSON array: element with empty or null SignalName → skipped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow64JsonEmptyNullSignalNameInElement:
+    """Excel Row 64: JSON array where elements have empty-string or null SignalName →
+    those elements are skipped; valid elements are ingested → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good   = f"{unique_user_id}_GOOD"
+        self.user_empty  = f"{unique_user_id}_EMPTY"
+        self.user_null   = f"{unique_user_id}_NULL"
+        self.signal_name = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good,  "SignalName": sig,  "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_empty, "SignalName": "",   "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_null,  "SignalName": None, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row64"] = {
+            "user_ids":    [self.user_good],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"absent_user_ids": [self.user_empty, self.user_null]},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow64_empty_null_signal_name_skipped_returns_200(self):
+        """Row 64: Elements with empty/null SignalName skipped → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 64] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 65  —  JSON array: element with missing/empty/null SignalValue → inserted
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow65JsonEmptyNullSignalValueInserted:
+    """Excel Row 65: JSON elements with missing, empty, or null SignalValue are
+    inserted (not skipped) — same behaviour as CSV Row 37 → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good    = f"{unique_user_id}_GOOD"
+        self.user_missing = f"{unique_user_id}_MISS"
+        self.user_empty   = f"{unique_user_id}_EMPTY"
+        self.user_null    = f"{unique_user_id}_NULL"
+        self.signal_name  = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good,    "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            # missing SignalValue key
+            {"ClientUserId": self.user_missing, "SignalName": sig,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_empty,   "SignalName": sig, "SignalValue": "",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_null,    "SignalName": sig, "SignalValue": None,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row65"] = {
+            "user_ids":    [self.user_good, self.user_missing, self.user_empty, self.user_null],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow65_empty_null_signal_value_inserted_returns_200(self):
+        """Row 65: Elements with missing/empty/null SignalValue are inserted (not skipped) → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 65] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 66  —  JSON array: element with bad/missing ResponseTime → skipped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow66JsonBadResponseTimeRowSkipped:
+    """Excel Row 66: JSON elements with missing, empty, null, or non-date ResponseTime
+    are skipped; valid elements are ingested → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_good    = f"{unique_user_id}_GOOD"
+        self.user_missing = f"{unique_user_id}_MISS"
+        self.user_empty   = f"{unique_user_id}_EMPTY"
+        self.user_null    = f"{unique_user_id}_NULL"
+        self.user_bad     = f"{unique_user_id}_BAD"
+        self.signal_name  = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_good,    "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            # missing ResponseTime key entirely
+            {"ClientUserId": self.user_missing, "SignalName": sig, "SignalValue": 40000,
+             "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_empty,   "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_null,    "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": None, "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_bad,     "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "not-a-date", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row66"] = {
+            "user_ids":    [self.user_good],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"absent_user_ids": [
+                self.user_missing, self.user_empty, self.user_null, self.user_bad,
+            ]},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow66_bad_response_time_elements_skipped_returns_200(self):
+        """Row 66: JSON elements with bad/missing ResponseTime skipped → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 66] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 67  —  JSON optional fields stored correctly
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow67JsonOptionalFields:
+    """Excel Row 67: All JSON optional fields (ResponseGroup, platform, metadata)
+    accepted and stored correctly → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.client_user_id = unique_user_id
+        self.signal_name    = unique_signal_name
+        self.response = api_client.post_json(SCHEMA, [{
+            "ClientUserId":  self.client_user_id,
+            "SignalName":    self.signal_name,
+            "SignalValue":   40000,
+            "ResponseTime":  "2024-01-15",
+            "ResponseGroup": "AutoTestGroup",
+            "platform":      "kb",
+            "metadata":      "AutoMeta",
+        }])
+        submissions["sig_row67"] = {
+            "user_ids":    [self.client_user_id],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra": {
+                "expected_columns": {
+                    "response_group":   "AutoTestGroup",
+                    "platform":         "kb",
+                    "signal_meta_data": "AutoMeta",
+                },
+            },
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow67_json_optional_fields_accepted_returns_200(self):
+        """Row 67: JSON with all optional fields → 200."""
+        body = api_client.assert_happy_response(self.response, SCHEMA, "json")
+        assert body, "[Row 67] Response body empty"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 68  —  JSON missing optional field values → stored as NULL
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow68JsonNullOptionalValues:
+    """Excel Row 68: JSON elements with empty/null optional field values →
+    those columns stored as NULL in client_users_data → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_no_grp  = f"{unique_user_id}_NOGRP"
+        self.user_no_plat = f"{unique_user_id}_NOPLAT"
+        self.user_no_meta = f"{unique_user_id}_NOMETA"
+        self.signal_name  = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_no_grp,  "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": None, "platform": "kb", "metadata": "meta1"},
+            {"ClientUserId": self.user_no_plat, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "GrpData", "platform": None, "metadata": "meta2"},
+            {"ClientUserId": self.user_no_meta, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "GrpData", "platform": "kb", "metadata": None},
+        ])
+        submissions["sig_row68"] = {
+            "user_ids":    [self.user_no_grp, self.user_no_plat, self.user_no_meta],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow68_json_null_optional_values_returns_200(self):
+        """Row 68: JSON with null optional field values → rows inserted → 200."""
+        assert self.response.status_code == 200, (
+            f"[Row 68] Expected 200 (null optional values), "
+            f"got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 69  —  JSON no duplicate rows in client_user_mapping
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow69JsonNoDuplicateMapping:
+    """Excel Row 69: Same client_user_id sent twice in separate JSON objects →
+    client_user_mapping should have only one entry for that user → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.client_user_id = unique_user_id
+        self.signal_name    = unique_signal_name
+        uid = self.client_user_id
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": uid, "SignalName": sig, "SignalValue": 40000,
+             "ResponseTime": "2024-01-15", "ResponseGroup": "Data1", "platform": "kb1"},
+            {"ClientUserId": uid, "SignalName": sig, "SignalValue": 99999,
+             "ResponseTime": "2024-01-16", "ResponseGroup": "Data2", "platform": "kb2"},
+        ])
+        submissions["sig_row69"] = {
+            "user_ids":    [self.client_user_id],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow69_json_no_duplicate_mapping_returns_200(self):
+        """Row 69: Same user sent twice in JSON → 200; DB phase verifies one mapping entry."""
+        assert self.response.status_code == 200, (
+            f"[Row 69] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ── SKIP : Row 70  (> 1 GB JSON file — manual only) ──────────────────────────
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 71  —  JSON signal_value_numeric + signal_value_currency computed
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow71JsonComputedNumericCurrency:
+    """Excel Row 71: JSON with numeric SignalValue →
+    signal_value_numeric and signal_value_currency populated → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.client_user_id = unique_user_id
+        self.signal_name    = unique_signal_name
+        self.response = api_client.post_json(SCHEMA, [{
+            "ClientUserId":  self.client_user_id,
+            "SignalName":    self.signal_name,
+            "SignalValue":   40000,
+            "ResponseTime":  "2024-01-15",
+            "ResponseGroup": "TestData",
+            "platform":      "kb",
+        }])
+        submissions["sig_row71"] = {
+            "user_ids":    [self.client_user_id],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+            "extra":       {"expected_numeric": 40000, "check_currency": True},
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow71_json_numeric_signal_returns_200(self):
+        """Row 71: JSON numeric SignalValue → 200; DB phase checks signal_value_numeric & currency."""
+        assert self.response.status_code == 200, (
+            f"[Row 71] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 72  —  JSON signal_value_date computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow72JsonComputedSignalValueDate:
+    """Excel Row 72: JSON with date-parseable SignalValue →
+    signal_value_date column populated → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.user_tz    = f"{unique_user_id}_TZ"
+        self.user_plain = f"{unique_user_id}_PLAIN"
+        self.user_date  = f"{unique_user_id}_DATE"
+        self.signal_name = unique_signal_name
+        sig = self.signal_name
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.user_tz,    "SignalName": sig,
+             "SignalValue": "2024-02-03T18:30:30-05:00", "ResponseTime": "2024-01-15",
+             "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_plain, "SignalName": sig,
+             "SignalValue": "2024-02-03T18:30:30",       "ResponseTime": "2024-01-15",
+             "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.user_date,  "SignalName": sig,
+             "SignalValue": "2024-02-03",                "ResponseTime": "2024-01-15",
+             "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row72"] = {
+            "user_ids":    [self.user_tz, self.user_plain, self.user_date],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow72_json_date_signal_value_returns_200(self):
+        """Row 72: JSON date-parseable SignalValue → 200; DB phase checks signal_value_date."""
+        assert self.response.status_code == 200, (
+            f"[Row 72] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 73  —  JSON signal_value_date_duration computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow73JsonComputedDateDuration:
+    """Excel Row 73: JSON with date-parseable SignalValue →
+    signal_value_date_duration (days since date) populated → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        self.client_user_id = unique_user_id
+        self.signal_name    = unique_signal_name
+        self.response = api_client.post_json(SCHEMA, [{
+            "ClientUserId":  self.client_user_id,
+            "SignalName":    self.signal_name,
+            "SignalValue":   "2024-02-03",
+            "ResponseTime":  "2024-01-15",
+            "ResponseGroup": "TestData",
+            "platform":      "kb",
+        }])
+        submissions["sig_row73"] = {
+            "user_ids":    [self.client_user_id],
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow73_json_date_duration_field_returns_200(self):
+        """Row 73: JSON date SignalValue → 200; DB phase checks signal_value_date_duration not NULL."""
+        assert self.response.status_code == 200, (
+            f"[Row 73] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 74  —  JSON signal_value_bool computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow74JsonComputedBoolField:
+    """Excel Row 74: JSON with boolean-like SignalValues (0,1,2,-1,True,False,true,false,TRUE,FALSE)
+    → signal_value_bool populated for valid boolean values → 200."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_signal_name, submissions):
+        sig = unique_signal_name
+        uid = unique_user_id
+        self.users = {
+            "zero":     f"{uid}_0",
+            "one":      f"{uid}_1",
+            "two":      f"{uid}_2",
+            "neg_one":  f"{uid}_N1",
+            "true_u":   f"{uid}_TU",
+            "false_u":  f"{uid}_FU",
+            "true_l":   f"{uid}_TL",
+            "false_l":  f"{uid}_FL",
+            "true_uu":  f"{uid}_TUU",
+            "false_uu": f"{uid}_FUU",
+        }
+        self.signal_name = sig
+        self.response = api_client.post_json(SCHEMA, [
+            {"ClientUserId": self.users["zero"],     "SignalName": sig, "SignalValue": "0",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["one"],      "SignalName": sig, "SignalValue": "1",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["two"],      "SignalName": sig, "SignalValue": "2",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["neg_one"],  "SignalName": sig, "SignalValue": "-1",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["true_u"],   "SignalName": sig, "SignalValue": "True",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["false_u"],  "SignalName": sig, "SignalValue": "False",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["true_l"],   "SignalName": sig, "SignalValue": "true",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["false_l"],  "SignalName": sig, "SignalValue": "false",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["true_uu"],  "SignalName": sig, "SignalValue": "TRUE",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+            {"ClientUserId": self.users["false_uu"], "SignalName": sig, "SignalValue": "FALSE",
+             "ResponseTime": "2024-01-15", "ResponseGroup": "TestData", "platform": "kb"},
+        ])
+        submissions["sig_row74"] = {
+            "user_ids":    list(self.users.values()),
+            "signal_name": self.signal_name,
+            "api_status":  self.response.status_code,
+        }
+
+    @pytest.mark.signals
+    @pytest.mark.api
+    def test_sigrow74_json_bool_signal_values_returns_200(self):
+        """Row 74: JSON boolean-like SignalValues → 200; DB phase checks signal_value_bool."""
+        assert self.response.status_code == 200, (
+            f"[Row 74] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
         )

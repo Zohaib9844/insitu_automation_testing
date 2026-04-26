@@ -1236,3 +1236,379 @@ class TestSigRow60DB:
             f"[Row 60] No rows in client_users_data for '{uid}'. "
             "Misspelled optional JSON keys may have incorrectly caused the row to be rejected."
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 61  —  JSON element with missing ClientUserId key → not in DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow61DB:
+    """Excel Row 61 — DB: valid elements stored; element with missing ClientUserId key absent."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow61_good_users_in_db_missing_key_element_absent(self, db_snapshot, submissions):
+        """Row 61: Valid elements stored; element lacking ClientUserId key not in client_users_data."""
+        sub = submissions.get("sig_row61", {})
+        uid_list = sub.get("user_ids", [])
+        assert uid_list, "[Row 61] Phase-1 did not register any user_ids for sig_row61"
+        for uid in uid_list:
+            rows = _sig_rows(db_snapshot, uid)
+            assert rows, f"[Row 61] Valid user '{uid}' not found in client_users_data"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 62  —  JSON element with empty/null ClientUserId → not in DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow62DB:
+    """Excel Row 62 — DB: valid element stored; elements with empty/null ClientUserId absent."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow62_good_user_in_db_empty_null_client_user_id_absent(self, db_snapshot, submissions):
+        """Row 62: Valid user in DB; empty/null ClientUserId elements absent."""
+        sub = submissions.get("sig_row62", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 62] Phase-1 did not register sig_row62 submission"
+        assert _sig_rows(db_snapshot, uid), f"[Row 62] Valid user '{uid}' not in client_users_data"
+
+        # empty-string and None ClientUserId should never create a DB row
+        for bad_uid in ["", None]:
+            if bad_uid is None:
+                continue  # None key can't be looked up; absence confirmed by no crash
+            bad_rows = _sig_rows(db_snapshot, str(bad_uid))
+            assert not bad_rows, (
+                f"[Row 62] Empty/null ClientUserId should not be in DB, found: {bad_rows}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 63  —  JSON element with missing SignalName key → not in DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow63DB:
+    """Excel Row 63 — DB: valid element stored; element with missing SignalName key absent."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow63_good_user_in_db_missing_signal_name_element_absent(self, db_snapshot, submissions):
+        """Row 63: Valid element in DB; element with missing SignalName key absent."""
+        sub = submissions.get("sig_row63", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 63] Phase-1 did not register sig_row63 submission"
+        assert _sig_rows(db_snapshot, uid), f"[Row 63] Valid user '{uid}' not in client_users_data"
+
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _sig_rows(db_snapshot, bad_uid)
+            assert not bad_rows, (
+                f"[Row 63] User '{bad_uid}' (missing SignalName key) should not be in DB, "
+                f"found: {bad_rows}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 64  —  JSON element with empty/null SignalName → not in DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow64DB:
+    """Excel Row 64 — DB: valid element stored; elements with empty/null SignalName absent."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow64_good_user_in_db_empty_null_signal_name_absent(self, db_snapshot, submissions):
+        """Row 64: Valid element in DB; elements with empty/null SignalName absent."""
+        sub = submissions.get("sig_row64", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 64] Phase-1 did not register sig_row64 submission"
+        assert _sig_rows(db_snapshot, uid), f"[Row 64] Valid user '{uid}' not in client_users_data"
+
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _sig_rows(db_snapshot, bad_uid)
+            assert not bad_rows, (
+                f"[Row 64] User '{bad_uid}' (empty/null SignalName) should not be in DB, "
+                f"found: {bad_rows}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 65  —  JSON element with missing/empty/null SignalValue → inserted
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow65DB:
+    """Excel Row 65 — DB: all elements including those with missing/empty/null SignalValue
+    are inserted (not skipped)."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow65_all_users_in_db_including_empty_signal_value(self, db_snapshot, submissions):
+        """Row 65: Missing/empty/null SignalValue elements inserted (not skipped) → all users in DB."""
+        sub = submissions.get("sig_row65", {})
+        uid_list = sub.get("user_ids", [])
+        assert uid_list, "[Row 65] Phase-1 did not register any user_ids for sig_row65"
+        for uid in uid_list:
+            rows = _sig_rows(db_snapshot, uid)
+            assert rows, (
+                f"[Row 65] User '{uid}' not found in client_users_data. "
+                "Missing/empty/null SignalValue should NOT cause the element to be skipped."
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 66  —  JSON element with bad/missing ResponseTime → not in DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow66DB:
+    """Excel Row 66 — DB: valid element stored; elements with bad/missing ResponseTime absent."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow66_good_user_in_db_bad_response_time_absent(self, db_snapshot, submissions):
+        """Row 66: Valid element in DB; bad/missing ResponseTime elements absent."""
+        sub = submissions.get("sig_row66", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 66] Phase-1 did not register sig_row66 submission"
+        assert _sig_rows(db_snapshot, uid), f"[Row 66] Valid user '{uid}' not in client_users_data"
+
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _sig_rows(db_snapshot, bad_uid)
+            assert not bad_rows, (
+                f"[Row 66] User '{bad_uid}' (bad ResponseTime) should not be in DB, "
+                f"found: {bad_rows}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 67  —  JSON optional fields stored correctly
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow67DB:
+    """Excel Row 67 — DB: response_group, platform, signal_meta_data stored correctly from JSON."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow67_json_optional_column_values_correct(self, db_snapshot, submissions):
+        """Row 67: JSON optional fields (response_group, platform, metadata) stored in DB."""
+        sub = submissions.get("sig_row67", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 67] Phase-1 did not register sig_row67 submission"
+        rows = _sig_rows(db_snapshot, uid)
+        assert rows, f"[Row 67] No rows in client_users_data for '{uid}'"
+
+        expected = sub.get("extra", {}).get("expected_columns", {})
+        match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+        assert match, f"[Row 67] Signal row not found for '{uid}'"
+        row = match[0]
+
+        if "response_group" in expected:
+            assert (row.get("response_group") or "").lower() == expected["response_group"].lower(), (
+                f"[Row 67] response_group: expected '{expected['response_group']}', "
+                f"got '{row.get('response_group')}'"
+            )
+        if "platform" in expected:
+            assert (row.get("platform") or "").lower() == expected["platform"].lower(), (
+                f"[Row 67] platform: expected '{expected['platform']}', "
+                f"got '{row.get('platform')}'"
+            )
+        if "signal_meta_data" in expected:
+            assert row.get("signal_meta_data") is not None, (
+                f"[Row 67] signal_meta_data should be set, got NULL. "
+                f"Expected: '{expected['signal_meta_data']}'"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 68  —  JSON missing/null optional values → stored as NULL
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow68DB:
+    """Excel Row 68 — DB: JSON elements with null optional values → columns stored as NULL."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow68_json_rows_inserted_and_optional_fields_null(self, db_snapshot, submissions):
+        """Row 68: All 3 JSON rows inserted; their null optional fields are NULL in DB."""
+        sub = submissions.get("sig_row68", {})
+        uid_list = sub.get("user_ids", [])
+        assert uid_list, "[Row 68] Phase-1 did not register any user_ids for sig_row68"
+
+        uid_no_grp, uid_no_plat, uid_no_meta = uid_list
+
+        rows = _sig_rows(db_snapshot, uid_no_grp)
+        assert rows, f"[Row 68] '{uid_no_grp}' (null ResponseGroup) not in client_users_data"
+        assert rows[0].get("response_group") is None, (
+            f"[Row 68] response_group should be NULL for '{uid_no_grp}', "
+            f"got '{rows[0].get('response_group')}'"
+        )
+
+        rows = _sig_rows(db_snapshot, uid_no_plat)
+        assert rows, f"[Row 68] '{uid_no_plat}' (null platform) not in client_users_data"
+        assert rows[0].get("platform") is None, (
+            f"[Row 68] platform should be NULL for '{uid_no_plat}', "
+            f"got '{rows[0].get('platform')}'"
+        )
+
+        rows = _sig_rows(db_snapshot, uid_no_meta)
+        assert rows, f"[Row 68] '{uid_no_meta}' (null metadata) not in client_users_data"
+        assert rows[0].get("signal_meta_data") is None, (
+            f"[Row 68] signal_meta_data should be NULL for '{uid_no_meta}', "
+            f"got '{rows[0].get('signal_meta_data')}'"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 69  —  JSON no duplicate rows in client_user_mapping
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow69DB:
+    """Excel Row 69 — DB: same user sent twice in JSON → exactly one entry in client_user_mapping."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow69_json_single_mapping_entry_for_repeated_user(self, db_snapshot, submissions):
+        """Row 69: Same client_user_id in two JSON elements → only one row in client_user_mapping."""
+        sub = submissions.get("sig_row69", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 69] Phase-1 did not register sig_row69 submission"
+        mapping = _mapping_rows(db_snapshot, uid)
+        assert mapping, f"[Row 69] No rows in client_user_mapping for '{uid}'"
+        assert len(mapping) == 1, (
+            f"[Row 69] Expected exactly 1 mapping row for '{uid}', "
+            f"found {len(mapping)} — duplicate mapping entries detected."
+        )
+
+
+# ── SKIP : Row 70  (> 1 GB JSON file — manual only) ──────────────────────────
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 71  —  JSON signal_value_numeric + signal_value_currency computed
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow71DB:
+    """Excel Row 71 — DB: JSON numeric SignalValue → signal_value_numeric and
+    signal_value_currency set."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow71_json_signal_value_numeric_set(self, db_snapshot, submissions):
+        """Row 71: JSON numeric SignalValue → signal_value_numeric column is not NULL."""
+        sub = submissions.get("sig_row71", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 71] Phase-1 did not register sig_row71 submission"
+        rows = _sig_rows(db_snapshot, uid)
+        assert rows, f"[Row 71] No rows in client_users_data for '{uid}'"
+        match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+        assert match, f"[Row 71] Signal row not found for '{uid}'"
+        val = match[0].get("signal_value_numeric")
+        assert val is not None, (
+            f"[Row 71] signal_value_numeric should be set for numeric SignalValue, got NULL.\n"
+            f"Full row: {match[0]}"
+        )
+        assert float(val) == float(sub.get("extra", {}).get("expected_numeric", 40000)), (
+            f"[Row 71] signal_value_numeric: expected 40000, got {val}"
+        )
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow71_json_signal_value_currency_set(self, db_snapshot, submissions):
+        """Row 71: JSON numeric SignalValue → signal_value_currency column is not NULL."""
+        sub = submissions.get("sig_row71", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid
+        rows = _sig_rows(db_snapshot, uid)
+        assert rows, f"[Row 71] No rows in client_users_data for '{uid}'"
+        match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+        assert match
+        assert match[0].get("signal_value_currency") is not None, (
+            f"[Row 71] signal_value_currency should be set for numeric SignalValue, got NULL.\n"
+            f"Full row: {match[0]}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 72  —  JSON signal_value_date computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow72DB:
+    """Excel Row 72 — DB: JSON date-parseable SignalValue → signal_value_date populated."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow72_json_signal_value_date_set_for_all_users(self, db_snapshot, submissions):
+        """Row 72: Date-parseable JSON SignalValue → signal_value_date not NULL for all users."""
+        sub = submissions.get("sig_row72", {})
+        uid_list = sub.get("user_ids", [])
+        assert uid_list, "[Row 72] Phase-1 did not register any user_ids for sig_row72"
+        for uid in uid_list:
+            rows = _sig_rows(db_snapshot, uid)
+            assert rows, f"[Row 72] No rows in client_users_data for '{uid}'"
+            match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+            assert match, f"[Row 72] Signal row not found for '{uid}'"
+            assert match[0].get("signal_value_date") is not None, (
+                f"[Row 72] signal_value_date should be set for '{uid}' (date-parseable value), "
+                f"got NULL.\nFull row: {match[0]}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 73  —  JSON signal_value_date_duration computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow73DB:
+    """Excel Row 73 — DB: JSON date SignalValue → signal_value_date_duration not NULL."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow73_json_signal_value_date_duration_set(self, db_snapshot, submissions):
+        """Row 73: JSON date SignalValue → signal_value_date_duration column not NULL."""
+        sub = submissions.get("sig_row73", {})
+        uid = sub.get("user_ids", [None])[0]
+        assert uid, "[Row 73] Phase-1 did not register sig_row73 submission"
+        rows = _sig_rows(db_snapshot, uid)
+        assert rows, f"[Row 73] No rows in client_users_data for '{uid}'"
+        match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+        assert match, f"[Row 73] Signal row not found for '{uid}'"
+        val = match[0].get("signal_value_date_duration")
+        assert val is not None, (
+            f"[Row 73] signal_value_date_duration should be set (days since date), got NULL.\n"
+            f"Full row: {match[0]}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXCEL ROW 74  —  JSON signal_value_bool computed field
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSigRow74DB:
+    """Excel Row 74 — DB: JSON boolean-like SignalValues → signal_value_bool populated."""
+
+    @pytest.mark.signals
+    @pytest.mark.db
+    def test_sigrow74_json_signal_value_bool_set_for_all_users(self, db_snapshot, submissions):
+        """Row 74: JSON boolean-like SignalValues (0,1,True,False,true,false,TRUE,FALSE) →
+        signal_value_bool not NULL for those users."""
+        sub = submissions.get("sig_row74", {})
+        uid_list = sub.get("user_ids", [])
+        assert uid_list, "[Row 74] Phase-1 did not register any user_ids for sig_row74"
+        # Only 0, 1, True/true/TRUE, False/false/FALSE are boolean — 2 and -1 are not
+        bool_keys = {"zero", "one", "true_u", "false_u", "true_l", "false_l", "true_uu", "false_uu"}
+        users_dict = {
+            "zero":     f"{uid_list[0].rsplit('_', 1)[0]}_0",
+            "one":      f"{uid_list[0].rsplit('_', 1)[0]}_1",
+        }
+        # Use the full uid_list as stored; check all are in DB, then verify bool field
+        for uid in uid_list:
+            rows = _sig_rows(db_snapshot, uid)
+            assert rows, f"[Row 74] No rows in client_users_data for '{uid}'"
+            match = [r for r in rows if r.get("signal_name", "").lower() == sub["signal_name"].lower()]
+            assert match, f"[Row 74] Signal row not found for '{uid}'"
+            # For non-boolean values (2, -1) signal_value_bool may legitimately be NULL —
+            # but for all others it must be set.
+            suffix = uid.split("_")[-1]
+            if suffix in ("2", "N1"):
+                continue  # 2 and -1 are not valid booleans; field may be NULL
+            assert match[0].get("signal_value_bool") is not None, (
+                f"[Row 74] signal_value_bool should be set for '{uid}' "
+                f"(boolean-like value), got NULL.\nFull row: {match[0]}"
+            )
