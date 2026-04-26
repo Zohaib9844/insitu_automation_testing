@@ -54,10 +54,7 @@ HTML report "Case Order" column tells you the exact Excel row.
 
 SKIPPED rows (manual or known-bug — noted inline):
   Row 18 : 512 MB size-limit test  (manual only)
-  Row 22 : projectName CSV         (known bug — Azure DevOps ticket)
-  Row 31 : typo in column name     (ambiguous expected behaviour)
   Row 42 : > 1 GB file             (manual only)
-  Row 50 : projectName JSON        (known bug — Azure DevOps ticket)
   Row 70 : > 1 GB JSON file (manual only)
 
 ──────────────────────────────────────────────────────────────────────────────
