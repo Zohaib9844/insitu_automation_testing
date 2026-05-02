@@ -29,6 +29,65 @@ sys.path.insert(0, str(Path(__file__).parent))
 import config
 from utils import db_client
 
+# ── Excel title mapping ──────────────────────────────────────────────────────
+# Maps the code's case key (e.g. "row76") to the exact title from the Excel sheet.
+# Code row number = Excel row number - 1 (consistent offset throughout the suite).
+TC_TITLES: dict[str, str] = {
+    # Happy path — signals
+    "TC-SIG-01": "TC-SIG-01: Verify signals CSV ingestion (happy path)",
+    "TC-SIG-04": "TC-SIG-04: Verify signals JSON single ingestion (happy path)",
+    "TC-SIG-06": "TC-SIG-06: Verify signals JSON array ingestion (happy path)",
+    # Happy path — user properties
+    "TC-UP-01":  "TC-UP-01: Verify userprops CSV ingestion (happy path)",
+    "TC-UP-03":  "TC-UP-03: Verify userprops JSON single ingestion (happy path)",
+    "TC-UP-05":  "TC-UP-05: Verify userprops JSON array ingestion (happy path)",
+    # Regression rows 76–119 (code row = Excel row - 1)
+    "row76":  "Verify that data receiver API with userproperties schema and csv format is ingesting data in all the user_properties table",
+    "row77":  "Verify that data receiver API with userproperties schema and csv format is ingesting bsent=false and modified date for all the newly added properties",
+    "row78":  "Verify that data receiver API with userproperties schema and csv format is ingesting bsent=false and modified date for all the updated properties with all datatypes",
+    "row79":  "Verify that data receiver API with userproperties schema in csv format is giving error for the row with more than datatype values but insert other valid rows",
+    "row80":  "Verify that data receiver API with userproperties schema and csv format is trimming spaces from all the fields while ingesting data in user_properties",
+    "row81":  "Verify that data receiver API with userproperties schema in csv format is throwing error in case of missing ClientUserId column",
+    "row82":  "Verify that data receiver API with userproperties schema in csv format is throwing error in case of missing PropertyName column",
+    "row83":  "Verify that data receiver API with userproperties schema in csv format is throwing error in case of missing property_value column",
+    "row84":  "Verify that data receiver API with userproperties schema in csv format is not entering data for the row in which ClientUserId column is missing and enter remaining data",
+    "row85":  "Verify that data receiver API with userproperties schema in csv format is not entering data for the row in which ClientUserId column is empty or null and enter remaining data",
+    "row86":  "Verify that data receiver API with userproperties schema in csv format is not entering data for the row in which PropertyName column is missing and enter remaining data",
+    "row87":  "Verify that data receiver API with userproperties schema in csv format is not entering data for the row in which PropertyName column is empty or null and enter remaining data",
+    "row88":  "Verify that data receiver API with userproperties schema in csv format is not entering data for the row in which property_value column is missing and enter remaining data",
+    "row89":  "Verify that data receiver API with userproperties schema in csv format is entering data for the row in which property_value column is missing, empty or null",
+    "row90":  "Verify that data receiver API with userproperties schema and in csv format is ignoring the columns which are not usable and not entering the required columns data",
+    # row91 intentionally absent — no Excel mapping (Excel 92 = 'file size >1GB, not tested')
+    "row92":  "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value Text column",
+    "row93":  "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value is Text but given in any other property_value Type Column",
+    "row94":  "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value Text for in user_properties table",
+    "row95":  "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value Text in user_properties",
+    "row96":  "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_int column",
+    "row97":  "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_int but given in any other property_value Type Column",
+    "row98":  "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_int for in user_properties table",
+    "row99":  "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value_int in user_properties",
+    "row100": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_double column",
+    "row101": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_double but given in any other property_value Type Column",
+    "row102": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_double for in user_properties table",
+    "row103": "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value_double in user_properties",
+    "row104": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_date column",
+    "row105": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_date but given in any other property_value Type Column",
+    "row106": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_date for in user_properties table",
+    "row107": "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value_date in user_properties",
+    "row108": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_currency column",
+    "row109": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_currency but given in any other property_value Type Column",
+    "row110": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_currency for in user_properties table",
+    "row111": "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value_currency in user_properties",
+    "row112": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_bool column",
+    "row113": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_bool but given in any other property_value Type Column",
+    "row114": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_bool for in user_properties table",
+    "row115": "Verify that data receiver API with userproperties schema and csv format is ignoring case while verifying duplication for property_value_bool in user_properties",
+    "row116": "Verify that data receiver API with userproperties schema and csv is ingesting data correctly in user_properties by filling property_value_json column",
+    "row117": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_json column with json array",
+    "row118": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_json but given in any other property_value Type Column",
+    "row119": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_json for in user_properties table",
+}
+
 _session_run_id: str | None = None
 _report_meta: dict[str, dict] = {}
 _coverage_summary: dict[str, list[int]] = {"present": [], "missing": [], "extra": []}
@@ -228,6 +287,11 @@ def _layer(item: pytest.Item) -> str:
 
 
 def _description(item: pytest.Item) -> str:
+    """Return the exact Excel title for the test case, falling back to the docstring."""
+    case = _case_key(item)
+    if case in TC_TITLES:
+        return TC_TITLES[case]
+    # Fallback: use the class or function docstring
     doc = (getattr(item.function, "__doc__", "") or "").strip()
     if doc:
         return " ".join(doc.split())
@@ -235,7 +299,6 @@ def _description(item: pytest.Item) -> str:
     if class_doc:
         return " ".join(class_doc.split())
     return item.name
-
 
 def _case_key(item: pytest.Item) -> str:
     row = _extract_row_number(item.nodeid)
@@ -280,29 +343,64 @@ def _final_verdict_for_case(case: str) -> str:
 
 
 def _failure_diagnosis(case: str) -> str:
+    """
+    Returns a single plain-English verdict for non-technical readers:
+    - What was checked (API status + DB presence)
+    - If failed: exactly what went wrong in simple terms
+    """
     api_status = _bucket_status(case, "api")
     db_status  = _bucket_status(case, "db")
     api_reason = _bucket_reason(case, "api")
     db_reason  = _bucket_reason(case, "db")
 
-    if db_status == "FAIL" and api_status == "FAIL":
-        return f"Both failed — API: {api_reason} | DB: {db_reason}"
-    if api_status == "FAIL" and db_status == "PASS":
-        return f"API failed, DB incidentally passed — {api_reason}"
-    if db_status == "FAIL" and api_status == "PASS":          # ← was missing
-        return f"API passed, DB failed — {db_reason}"
-    if db_status == "FAIL":                                   # api is N/A
-        return f"DB failed — {db_reason}"
-    if api_status == "FAIL":                                  # db is N/A
-        return f"API failed — {api_reason}"
-    if db_status == "PASS" and api_status == "PASS":
-        return "API and DB checks passed"
-    if db_status == "PASS" and api_status == "N/A":
-        return "DB checks passed (no API check in this case)"
+    # ── Both passed ──────────────────────────────────────────────────────
+    if api_status == "PASS" and db_status == "PASS":
+        return "API returned expected status ✓  |  Database record verified ✓"
     if api_status == "PASS" and db_status == "N/A":
-        return "API checks passed (API-only case)"
-    return "N/A" 
+        return "API returned expected status ✓  (no DB check for this case)"
+    if db_status == "PASS" and api_status == "N/A":
+        return "Database record verified ✓  (no API check for this case)"
 
+    # ── Failures — translate to plain English ────────────────────────────
+    if api_status == "FAIL" and db_status in ("PASS", "N/A"):
+        return f"FAILED — API did not return the expected response. Detail: {api_reason}"
+
+    if db_status == "FAIL" and api_status == "PASS":
+        reason_lower = db_reason.lower()
+        if "not in user_properties" in reason_lower or "no user_properties" in reason_lower:
+            return "FAILED — API accepted the request but data was NOT saved to the database."
+        if "should not be inserted" in reason_lower or "should not be in" in reason_lower:
+            return "FAILED — Data that should have been rejected was saved to the database."
+        if "space trimming failed" in reason_lower or "padded" in reason_lower:
+            return "FAILED — Record was saved with leading/trailing spaces instead of being trimmed."
+        if "duplicate" in reason_lower:
+            return "FAILED — Duplicate rows were stored in the database (deduplication is not working)."
+        if "text wins" in reason_lower or "preserved" in reason_lower:
+            return f"FAILED — Wrong data type column was populated in the database. Detail: {db_reason}"
+        if "assert []" in db_reason:
+            return "FAILED — API accepted the request but the record was NOT saved to the database."
+        if "assert not [" in db_reason:
+            return "FAILED — A record that should have been rejected was found in the database."
+        if ".get" in db_reason:
+            return "FAILED — Record is in the database but the expected field value was not populated (wrong data type column)."
+        return "FAILED — Database check failed (unexpected assertion result)."
+
+    if api_status == "FAIL" and db_status == "FAIL":
+        return (
+            f"FAILED — Both API and DB checks failed. "
+            f"API: {api_reason}  |  DB: {db_reason}"
+        )
+
+    if db_status == "FAIL" and api_status == "N/A":
+            if "assert []" in db_reason:
+                return "FAILED — API accepted the request but the record was NOT saved to the database."
+            if "assert not [" in db_reason:
+                return "FAILED — A record that should have been rejected was found in the database."
+            if ".get" in db_reason:
+                return "FAILED — Record is in the database but the expected field value was not populated (wrong data type column)."
+            return "FAILED — Database check failed (unexpected assertion result)."
+
+    return "N/A"
 
 def _case_order(item: pytest.Item) -> str:
     row = _extract_row_number(item.nodeid)
@@ -432,59 +530,76 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_header(cells):
-    cells.insert(2, "<th>Case</th>")
-    cells.insert(3, "<th>Case Order</th>")
-    cells.insert(4, "<th>Description</th>")
-    cells.insert(5, "<th>API Check</th>")
-    cells.insert(6, "<th>DB Check</th>")
-    cells.insert(7, "<th>Final Verdict</th>")
-    cells.insert(8, "<th>Failure Diagnosis</th>")
-    cells.insert(9, "<th>Layer</th>")
-    cells.insert(10, "<th>Test Data</th>")
-    cells.insert(11, "<th>Reason</th>")
-    cells.insert(12, "<th>SQL Query</th>")
+    cells.insert(2, "<th>Test Case Title</th>")
+    cells.insert(3, "<th>Result</th>")
+    cells.insert(4, "<th>Failure Reason</th>")
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_row(report, cells):
     meta = _report_meta.get(report.nodeid, {})
     case = meta.get("case_key")
-    api_check = _bucket_status(case, "api") if case else meta.get("api_check", "N/A")
-    db_check = _bucket_status(case, "db") if case else meta.get("db_check", "N/A")
-    verdict = _final_verdict_for_case(case) if case else meta.get("final_verdict", "N/A")
-    diagnosis = _failure_diagnosis(case) if case else meta.get("diagnosis", "N/A")
-    cells.insert(2, f"<td>{escape(meta.get('case_key', 'N/A'))}</td>")
-    cells.insert(3, f"<td>{escape(meta.get('case_order', 'N/A'))}</td>")
-    cells.insert(4, f"<td>{escape(meta.get('description', 'N/A'))}</td>")
-    cells.insert(5, f"<td>{escape(api_check)}</td>")
-    cells.insert(6, f"<td>{escape(db_check)}</td>")
-    cells.insert(7, f"<td>{escape(verdict)}</td>")
-    cells.insert(8, f"<td>{escape(diagnosis)}</td>")
-    cells.insert(9, f"<td>{escape(meta.get('layer', 'N/A'))}</td>")
-    cells.insert(10, f"<td>{escape(meta.get('test_data', 'N/A'))}</td>")
-    cells.insert(11, f"<td>{escape(meta.get('reason', 'N/A'))}</td>")
-    cells.insert(12, f"<td>{escape(meta.get('sql', 'N/A'))}</td>")
+
+    title    = TC_TITLES.get(case, meta.get("description", case or "N/A"))
+    verdict  = _final_verdict_for_case(case) if case else "N/A"
+    diagnosis = _failure_diagnosis(case) if case else "N/A"
+
+    # "What was checked" — concise summary of which checks ran and passed
+    verdict_style = (
+        "color:green;font-weight:bold" if verdict == "PASS"
+        else "color:red;font-weight:bold" if verdict == "FAIL"
+        else ""
+    )
+
+    cells.insert(2, f"<td style='max-width:420px;word-wrap:break-word'>{escape(title)}</td>")
+    cells.insert(3, f"<td style='{verdict_style}'>{escape(verdict)}</td>")
+    cells.insert(4, f"<td style='max-width:380px;word-wrap:break-word'>{escape(diagnosis)}</td>")
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_summary(prefix, summary, postfix):
     present = _coverage_summary.get("present", [])
     missing = _coverage_summary.get("missing", [])
-    extra = _coverage_summary.get("extra", [])
+
+    all_cases = sorted(
+        [c for c in _case_results.keys() if re.match(r'^row\d+$', c)],
+        key=lambda c: int(c[3:])
+    )
+    passed_cases = [c for c in all_cases if _final_verdict_for_case(c) == "PASS"]
+    failed_cases = [c for c in all_cases if _final_verdict_for_case(c) == "FAIL"]
+
+    rows_html = []
+    for case in all_cases:
+        title   = TC_TITLES.get(case, case)
+        verdict = _final_verdict_for_case(case)
+        diag    = _failure_diagnosis(case)
+        color   = "green" if verdict == "PASS" else "red" if verdict == "FAIL" else "gray"
+        rows_html.append(
+            f"<tr>"
+            f"<td style='padding:4px 8px'>{escape(title)}</td>"
+            f"<td style='padding:4px 12px;color:{color};font-weight:bold'>{escape(verdict)}</td>"
+            f"<td style='padding:4px 8px'>{escape(diag)}</td>"
+            f"</tr>"
+        )
+
+    summary_table = (
+        "<h2>Test Results Summary</h2>"
+        f"<p><b>Total cases:</b> {len(all_cases)} &nbsp;|&nbsp; "
+        f"<b style='color:green'>PASSED: {len(passed_cases)}</b> &nbsp;|&nbsp; "
+        f"<b style='color:red'>FAILED: {len(failed_cases)}</b></p>"
+        "<table border='1' cellpadding='0' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+        "<thead><tr style='background:#f0f0f0'>"
+        "<th style='padding:6px 8px;text-align:left'>Test Case Title (exact from Excel)</th>"
+        "<th style='padding:6px 12px'>Result</th>"
+        "<th style='padding:6px 8px;text-align:left'>Outcome / Failure Reason</th>"
+        "</tr></thead>"
+        "<tbody>" + "".join(rows_html) + "</tbody>"
+        "</table>"
+    )
 
     prefix.extend([
-        "<h3>Excel Coverage Audit</h3>",
-        "<p><b>Signal rows (5–60):</b> "
-        + str(sorted(_SIGNAL_ROWS & set(_coverage_summary.get('present', []))))
-        + "</p>",
-        "<p><b>User Properties rows (76–119):</b> "
-        + str(sorted(_UP_ROWS & set(_coverage_summary.get('present', []))))
-        + "</p>",
-        f"<p>Total rows present in collected suite: {len(_coverage_summary.get('present', []))}</p>",
-        "<p>Missing rows: "
-        + (", ".join(map(str, _coverage_summary.get("missing", []))) or "None")
-        + "</p>",
-        "<p>Out-of-range rows found: "
-        + (", ".join(map(str, _coverage_summary.get("extra", []))) or "None")
-        + "</p>",
+        summary_table,
+        "<br>",
+        "<p><i>Note: Code row numbers are offset by 1 from Excel row numbers "
+        "(code row 76 = Excel row 77). Titles above use the exact Excel wording.</i></p>",
     ])

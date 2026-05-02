@@ -280,30 +280,39 @@ class TestRow78AbsentFalseUpdatedProps:
 
 
 class TestRow79MultipleDataTypeValuesRejected:
+    """Row 79 (Excel 80): CSV contains a bad row with both PropertyValue + PropertyValueDouble
+    set at the same time (multi-datatype conflict). That row must be rejected/skipped.
+    The two flanking valid rows must still be inserted."""
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
-        self.user_good1 = f"{unique_user_id}_G1"
-        self.user_bad   = f"{unique_user_id}_BAD"
-        self.user_good2 = f"{unique_user_id}_G2"
+        self.user_good1    = f"{unique_user_id}_G1"
+        self.user_bad      = f"{unique_user_id}_BAD"
+        self.user_good2    = f"{unique_user_id}_G2"
         self.property_name = unique_property_name
-        # CSV with one bad row (invalid column) mixed with good rows
+
+        # Header has both PropertyValue AND PropertyValueDouble columns.
+        # Good rows leave PropertyValueDouble empty; bad row fills both.
         self.response = api_client.post_csv(
             SCHEMA_UP,
-            f"ClientUserId,PropertyName,PropertyValue\n"
-            f"{self.user_good1},{self.property_name},AutoTestValue1\n"
-            f"{self.user_good2},{self.property_name},AutoTestValue2",
+            f"ClientUserId,PropertyName,PropertyValue,PropertyValueDouble\n"
+            f"{self.user_good1},{self.property_name},AutoTestValue1,\n"
+            f"{self.user_bad},{self.property_name},BadTextValue,99.5\n"
+            f"{self.user_good2},{self.property_name},AutoTestValue2,",
         )
         submissions["79"] = {
             "user_ids":      [self.user_good1, self.user_good2],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
+            "extra":         {"absent_user_ids": [self.user_bad]},
         }
 
     @pytest.mark.regression
     @pytest.mark.api
     def test_row79_api_returns_200(self):
         assert self.response.status_code == 200, (
-            f"[Row 79] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
+            f"[Row 79] Expected 200 (valid rows accepted, bad row skipped), "
+            f"got {self.response.status_code}. Body: {self.response.text}"
         )
 
 
@@ -441,7 +450,7 @@ class TestRow85EmptyNullClientUserIdValue:
             "user_ids":      [self.user_valid],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"absent_user_ids": ["NULL"]},
+            "extra":         {"absent_user_ids": ["NULL", ""]},  # NULL literal AND empty string
         }
 
     @pytest.mark.regression
@@ -582,29 +591,37 @@ class TestRow90UnknownColumnsIgnored:
         )
 
 
-class TestRow91DuplicateColumnsRejected:
+# ─── EXTRA TEST — no corresponding Excel row ─────────────────────────────────
+# Excel row 92 = "file size >1GB — marked 'not tested'" and is skipped.
+# This test validates duplicate CSV column headers and is a valid additional
+# guard, but does NOT map to any Excel row number. The key "EXTRA_dup_cols"
+# keeps it out of the row-coverage audit.
+
+class TestExtraDuplicateColumnsRejected:
+    """EXTRA (not in Excel): Duplicate column headers in CSV must return 400."""
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
-        self.property_name = unique_property_name
+        self.property_name  = unique_property_name
         self.response = api_client.post_csv(
             SCHEMA_UP,
             f"ClientUserId,PropertyName,PropertyValue,PropertyValue\n"
             f"{self.client_user_id},{self.property_name},Val1,Val2",
         )
-        submissions["91"] = {
-            "user_ids": [self.client_user_id],
+        submissions["EXTRA_dup_cols"] = {
+            "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
-            "api_status": self.response.status_code,
+            "api_status":    self.response.status_code,
         }
 
     @pytest.mark.regression
     @pytest.mark.api
-    def test_row91_duplicate_columns_rejected(self):
+    def test_extra_duplicate_columns_rejected(self):
         assert self.response.status_code == 400, (
-            f"[Row 91] Duplicate column headers should return 400, got {self.response.status_code}"
+            f"[EXTRA] Duplicate column headers should return 400, "
+            f"got {self.response.status_code}. Body: {self.response.text}"
         )
-
 
 class TestRow92PropertyValueText:
     @pytest.fixture(autouse=True)
@@ -659,54 +676,63 @@ class TestRow93TypeConflictTextVsInt:
         )
 
 
-class TestRow94PropertyValueDouble:
+class TestRow94NoDuplicatePropertyValueText:
+    """Row 94 (Excel 95): CSV with identical PropertyValue rows for the same user+property.
+    API should return 200; DB should not contain duplicate rows."""
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":         self.client_user_id,
-            "PropertyName":         self.property_name,
-            "PropertyValueDouble":  99.5,
-        })
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},AutoTestTextValue\n"
+            f"{self.client_user_id},{self.property_name},AutoTestTextValue\n"  # exact duplicate
+            f"{self.client_user_id},{self.property_name},DifferentTextValue",  # different — should coexist
+        )
         submissions["94"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value_double", "expected_value": 99.5},
         }
 
     @pytest.mark.regression
     @pytest.mark.api
     def test_row94_api_returns_200(self):
         assert self.response.status_code == 200, (
-            f"[Row 94] Expected 200, got {self.response.status_code}"
+            f"[Row 94] Expected 200, got {self.response.status_code}. "
+            f"Body: {self.response.text}"
         )
 
 
-class TestRow95TypeConflictDoubleVsText:
+class TestRow95CaseInsensitiveDedupText:
+    """Row 95 (Excel 96): CSV with space-padded user ID rows that are duplicates after trimming.
+    API should treat them as the same record and not insert duplicates."""
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":         self.client_user_id,
-            "PropertyName":         self.property_name,
-            "PropertyValue":        "TextWins",
-            "PropertyValueDouble":  99.5,
-        })
+        self.response = api_client.post_csv(
+            SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"   {self.client_user_id}  ,  {self.property_name} ,AutoTestTextValue\n"  # padded — same after trim
+            f"{self.client_user_id},{self.property_name},AutoTestTextValue\n"           # clean duplicate
+            f"{self.client_user_id},{self.property_name},DifferentTextValue",           # different value
+        )
         submissions["95"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value", "expected_value": "TextWins"},
         }
 
     @pytest.mark.regression
     @pytest.mark.api
     def test_row95_api_returns_200(self):
         assert self.response.status_code == 200, (
-            f"[Row 95] Expected 200, got {self.response.status_code}"
+            f"[Row 95] Expected 200, got {self.response.status_code}. "
+            f"Body: {self.response.text}"
         )
 
 
@@ -1298,26 +1324,37 @@ class TestRow118TypeConflictJsonVsText:
         )
 
 
-class TestRow119PropertyValueBool:
+class TestRow119NoDuplicatePropertyValueJson:
+    """Row 119 (Excel 120): Sending the same PropertyValueJson twice for the same user+property.
+    No duplicate rows should be stored in the DB."""
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
+        self.json_payload   = {"key": "value", "nested": {"x": 1}}
+
+        # Send identical JSON payload twice
+        api_client.post_json(SCHEMA_UP, {
+            "ClientUserId":      self.client_user_id,
+            "PropertyName":      self.property_name,
+            "PropertyValueJson": self.json_payload,
+        })
         self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":       self.client_user_id,
-            "PropertyName":       self.property_name,
-            "PropertyValueBool":  True,
+            "ClientUserId":      self.client_user_id,
+            "PropertyName":      self.property_name,
+            "PropertyValueJson": self.json_payload,
         })
         submissions["119"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value_bool", "expected_value": True},
         }
 
     @pytest.mark.regression
     @pytest.mark.api
     def test_row119_api_returns_200(self):
         assert self.response.status_code == 200, (
-            f"[Row 119] Expected 200, got {self.response.status_code}"
+            f"[Row 119] Expected 200, got {self.response.status_code}. "
+            f"Body: {self.response.text}"
         )

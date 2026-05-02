@@ -205,30 +205,67 @@ class TestRow78DB:
 class TestRow79DB:
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row79_valid_rows_inserted(self, db_snapshot, submissions):
+    def test_row79_valid_rows_inserted_bad_row_rejected(self, db_snapshot, submissions):
         sub = submissions.get("79", {})
         uid1, uid2 = sub.get("user_ids", [None, None])
-        assert _up_rows(db_snapshot, uid1), f"[Row 79] G1 user '{uid1}' not in user_properties"
-        assert _up_rows(db_snapshot, uid2), f"[Row 79] G2 user '{uid2}' not in user_properties"
 
+        # Valid rows must be present
+        assert _up_rows(db_snapshot, uid1), (
+            f"[Row 79] Good row G1 '{uid1}' is missing from user_properties — "
+            "valid row was not inserted"
+        )
+        assert _up_rows(db_snapshot, uid2), (
+            f"[Row 79] Good row G2 '{uid2}' is missing from user_properties — "
+            "valid row was not inserted"
+        )
+
+        # Bad row (multi-datatype conflict) must NOT be present
+        for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            bad_rows = _up_rows(db_snapshot, bad_uid)
+            assert not bad_rows, (
+                f"[Row 79] BAD ROW '{bad_uid}' (had both PropertyValue + PropertyValueDouble) "
+                f"was inserted when it should have been rejected. Found: {bad_rows}"
+            )
 
 class TestRow80DB:
     @pytest.mark.regression
     @pytest.mark.db
     def test_row80_trimmed_user_id_and_value_in_db(self, db_snapshot, submissions):
-        sub = submissions.get("80", {})
-        uid = sub.get("user_ids", [None])[0]
-        rows = _up_rows(db_snapshot, uid)
-        assert rows, (
-            f"[Row 80] No user_properties row for '{uid}'. "
-            "Space trimming may have changed the stored ID."
-        )
-        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match, f"[Row 80] Property not found"
-        assert match[0].get("property_value") == "SpacedValue", (
-            f"[Row 80] Expected trimmed value 'SpacedValue', got '{match[0].get('property_value')}'"
-        )
+        sub   = submissions.get("80", {})
+        uid   = sub.get("user_ids", [None])[0]   # trimmed version — what SHOULD be in DB
+        padded_uid = f"  {uid}  "                  # what would appear if trimming FAILED
 
+        rows = _up_rows(db_snapshot, uid)
+
+        if not rows:
+            # Fallback: check whether the untrimmed (padded) UID was stored verbatim
+            padded_rows = _up_rows(db_snapshot, padded_uid)
+            if padded_rows:
+                pytest.fail(
+                    f"[Row 80] SPACE TRIMMING FAILED. "
+                    f"Record was stored with spaces ('{padded_uid}') "
+                    f"instead of the trimmed form ('{uid}'). "
+                    f"Stored row: {padded_rows[0]}"
+                )
+            pytest.fail(
+                f"[Row 80] No user_properties row found for either "
+                f"trimmed UID '{uid}' or padded UID '{padded_uid}'. "
+                "Record was not inserted at all."
+            )
+
+        match = [
+            r for r in rows
+            if r.get("property_name", "").lower() == sub["property_name"].lower()
+        ]
+        assert match, (
+            f"[Row 80] UID '{uid}' is in DB but property '{sub['property_name']}' "
+            "was not found in its rows"
+        )
+        stored_val = match[0].get("property_value")
+        assert stored_val == "SpacedValue", (
+            f"[Row 80] PropertyValue was not trimmed correctly. "
+            f"Expected 'SpacedValue', got '{stored_val}'"
+        )
 
 # Negative-path DB assertions:
 # if these payloads are invalid, no user_properties rows should be inserted.
@@ -278,16 +315,19 @@ class TestRow83DB:
         )
 
 
-class TestRow91DB:
+class TestExtraDuplicateColumnsDB:
+    """EXTRA (not in Excel): When duplicate columns are rejected (400), no DB row should exist."""
+
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row91_no_db_insert_when_duplicate_columns(self, db_snapshot, submissions):
-        sub = submissions.get("91", {})
+    def test_extra_dup_cols_no_db_insert(self, db_snapshot, submissions):
+        sub = submissions.get("EXTRA_dup_cols", {})
         uid = sub.get("user_ids", [None])[0]
-        assert uid, "[Row 91] Missing user_id from Phase-1 submission metadata"
+        if not uid:
+            pytest.skip("EXTRA_dup_cols submission not found — API phase may have been skipped")
         rows = _up_rows(db_snapshot, uid)
         assert not rows, (
-            f"[Row 91] Expected no user_properties row for invalid payload (duplicate columns), "
+            f"[EXTRA] Expected no user_properties row for duplicate-column payload, "
             f"but found: {rows}"
         )
 
@@ -402,38 +442,57 @@ class TestRow93DB:
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
         assert match, f"[Row 93] Property row not found"
         row = match[0]
+
+        # Winning column: text must be stored in property_value
         assert row.get("property_value") == "TextWins", (
             f"[Row 93] property_value should be 'TextWins', got '{row.get('property_value')}'"
+        )
+        # Losing column: property_value_int must NOT have been populated
+        assert row.get("property_value_int") is None, (
+            f"[Row 93] property_value_int should be NULL when text wins, "
+            f"got {row.get('property_value_int')}"
         )
 
 
 class TestRow94DB:
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row94_double_value_in_db(self, db_snapshot, submissions):
+    def test_row94_no_duplicate_text_rows(self, db_snapshot, submissions):
         sub = submissions.get("94", {})
         uid = sub.get("user_ids", [None])[0]
         rows = _up_rows(db_snapshot, uid)
-        assert rows, f"[Row 94] No user_properties row for '{uid}'"
-        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match, f"[Row 94] Property not found"
-        val = match[0].get("property_value_double")
-        assert val is not None, f"[Row 94] property_value_double is NULL"
-        assert float(val) == 99.5, f"[Row 94] Expected 99.5, got {val}"
-
+        assert rows, (
+            f"[Row 94] No user_properties row for '{uid}' — "
+            "record was not inserted at all"
+        )
+        match = [
+            r for r in rows
+            if r.get("property_name", "").lower() == sub["property_name"].lower()
+        ]
+        assert match, f"[Row 94] Property '{sub['property_name']}' not found for user '{uid}'"
+        assert len(match) <= 1, (
+            f"[Row 94] DUPLICATE ROWS DETECTED — expected at most 1 row for this property, "
+            f"found {len(match)}: {match}"
+        )
 
 class TestRow95DB:
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row95_text_wins_over_double(self, db_snapshot, submissions):
+    def test_row95_single_row_after_case_insensitive_dedup(self, db_snapshot, submissions):
         sub = submissions.get("95", {})
         uid = sub.get("user_ids", [None])[0]
         rows = _up_rows(db_snapshot, uid)
-        assert rows, f"[Row 95] No user_properties row for '{uid}'"
-        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match
-        assert match[0].get("property_value") == "TextWins", (
-            f"[Row 95] property_value should be 'TextWins'"
+        assert rows, (
+            f"[Row 95] No user_properties row for '{uid}' — "
+            "record was not inserted at all"
+        )
+        match = [
+            r for r in rows
+            if r.get("property_name", "").strip().lower() == sub["property_name"].lower()
+        ]
+        assert len(match) <= 1, (
+            f"[Row 95] Case-insensitive dedup failed — space-padded rows were stored as "
+            f"separate entries. Expected <=1 row, found {len(match)}: {match}"
         )
 
 
@@ -461,9 +520,17 @@ class TestRow97DB:
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 97] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match
-        assert match[0].get("property_value") == "TextWins", (
-            f"[Row 97] property_value should be 'TextWins'"
+        assert match, f"[Row 97] Property row not found"
+        row = match[0]
+
+        # Winning column: text must be in property_value
+        assert row.get("property_value") == "TextWins", (
+            f"[Row 97] property_value should be 'TextWins', got '{row.get('property_value')}'"
+        )
+        # Losing column: property_value_int must NOT have been populated
+        assert row.get("property_value_int") is None, (
+            f"[Row 97] property_value_int should be NULL when text wins, "
+            f"got {row.get('property_value_int')}"
         )
 
 
@@ -751,12 +818,20 @@ class TestRow118DB:
 class TestRow119DB:
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row119_bool_value_in_db(self, db_snapshot, submissions):
+    def test_row119_no_duplicate_json_rows(self, db_snapshot, submissions):
         sub = submissions.get("119", {})
         uid = sub.get("user_ids", [None])[0]
         rows = _up_rows(db_snapshot, uid)
-        assert rows, f"[Row 119] No user_properties row for '{uid}'"
-        match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match
-        val = match[0].get("property_value_bool")
-        assert val is True, f"[Row 119] property_value_bool should be True, got {val}"
+        assert rows, (
+            f"[Row 119] No user_properties row for '{uid}' — "
+            "JSON value was not inserted at all"
+        )
+        match = [
+            r for r in rows
+            if r.get("property_name", "").lower() == sub["property_name"].lower()
+        ]
+        assert match, f"[Row 119] Property '{sub['property_name']}' not found for user '{uid}'"
+        assert len(match) <= 1, (
+            f"[Row 119] DUPLICATE JSON ROWS — expected <=1 row for this property, "
+            f"found {len(match)}: {match}"
+        )
