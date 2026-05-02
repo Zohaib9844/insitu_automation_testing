@@ -86,12 +86,47 @@ TC_TITLES: dict[str, str] = {
     "row117": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_json column with json array",
     "row118": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_json but given in any other property_value Type Column",
     "row119": "Verify that data receiver API with userproperties schema and csv format is not inserting duplicate data property_value_json for in user_properties table",
+    # JSON format rows 120–152 (code row = Excel row - 1)
+    # row133 intentionally absent — Excel row 134 = 'file size >1GB, not tested'
+    "row120": "Verify that data receiver API with userproperties schema and json format is ingesting data in all the user_properties table",
+    "row121": "Verify that data receiver API with userproperties schema and json format is ingesting bsent=false and modified date for all the newly added properties",
+    "row122": "Verify that data receiver API with userproperties schema and json format is ingesting bsent=false and modified date for all the updated properties with all datatypes",
+    "row123": "Verify that data receiver API with userproperties schema and json format is trimming spaces from all the fields while ingesting data in user_properties",
+    "row124": "Verify that data receiver API with userproperties schema in json format is throwing error in case of missing ClientUserId column",
+    "row125": "Verify that data receiver API with userproperties schema in json format is throwing error in case of missing PropertyName column",
+    "row126": "Verify that data receiver API with userproperties schema in json format is throwing error in case of missing property_value column",
+    "row127": "Verify that data receiver API with userproperties schema in json format is not entering data for the row in which ClientUserId column is missing and enter remaining data",
+    "row128": "Verify that data receiver API with userproperties schema in json format is not entering data for the row in which ClientUserId column is empty or null and enter remaining rows data in which valid ClientUserId",
+    "row129": "Verify that data receiver API with userproperties schema in json format is not entering data for the row in which PropertyName column is missing and enter remaining data",
+    "row130": "Verify that data receiver API with userproperties schema in json format is not entering data for the row in which PropertyName column is  empty or null and enter remaining data",
+    "row131": "Verify that data receiver API with userproperties schema in json format is entering data for the ClientUserId which is not present in client_user_mapping",
+    "row132": "Verify that data receiver API with userproperties schema in json format is not entering data for the row in which property_value column is missing and enter remaining data",
+    "row134": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value Text column",
+    "row135": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value is Text but given in any other  property_value Type Column",
+    "row136": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value Text in user_properties table",
+    "row137": "Verify that data receiver API with userproperties schema and json format is ignoring case while verifying duplication for property_value Text in user_properties",
+    "row138": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_double column",
+    "row139": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing data property_value_double but given  in any other  property_value Type Column",
+    "row140": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value_double for  in user_properties table",
+    "row141": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_date column",
+    "row142": "Verify that data receiver API with userproperties schema is ingesting data in user_properties where existing property_value_date but given  in any other  property_value Type Column",
+    "row143": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value_date for  in user_properties table",
+    "row144": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_currency column",
+    "row145": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_currency but given  in any other property_value Type Column",
+    "row146": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value_currency for  in user_properties table",
+    "row147": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_bool column",
+    "row148": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_bool but given  in any other  property_value Type Column",
+    "row149": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value_bool for  in user_properties table",
+    "row150": "Verify that data receiver API with userproperties schema is ingesting data correctly in user_properties by filling property_value_json column",
+    "row151": "Verify that data receiver API with userproperties schema is not ingesting data in user_properties where existing property_value_json but given  in any other  property_value Type Column",
+    "row152": "Verify that data receiver API with userproperties schema and json format is not inserting duplicate data property_value_json for in user_properties table",
 }
 
 _session_run_id: str | None = None
 _report_meta: dict[str, dict] = {}
 _coverage_summary: dict[str, list[int]] = {"present": [], "missing": [], "extra": []}
 _case_results: dict[str, dict[str, list[dict[str, str | bool]]]] = {}
+_case_db_identifiers: dict[str, dict[str, list[str]]] = {}
 
 
 # ── Session run ID ─────────────────────────────────────────────────────────────
@@ -465,7 +500,7 @@ def _sql_query(item: pytest.Item) -> str:
 
 # ── Rows covered by each suite ────────────────────────────────────────────────
 _SIGNAL_ROWS    = set(range(5, 75)) - {18, 22, 31, 42, 50, 70}   # practical skips; 70 = >1 GB manual
-_UP_ROWS        = set(range(76, 120))
+_UP_ROWS        = set(range(76, 153))
 
 def pytest_collection_finish(session: pytest.Session):
     present = sorted({
@@ -526,80 +561,99 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
         # ← removed: api_check, db_check, final_verdict, diagnosis
         #    these are always recomputed live in pytest_html_results_table_row
     }
+    # ── Auto-collect DB identifiers from test instance ─────────────────────
+    if layer == "DB check":
+        inst = getattr(item, "instance", None)
+        if inst:
+            id_entry = _case_db_identifiers.setdefault(
+                case, {"should_have": [], "should_not_have": []}
+            )
+            for attr_name in vars(inst):
+                val = getattr(inst, attr_name, None)
+                if not isinstance(val, str):
+                    continue
+                if not val.upper().startswith("AT_USER_"):
+                    continue
+                val_upper = val.upper()
+                bucket_key = (
+                    "should_not_have"
+                    if ("_BAD" in val_upper or "_INVALID" in val_upper)
+                    else "should_have"
+                )
+                if val not in id_entry[bucket_key]:
+                    id_entry[bucket_key].append(val)
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_header(cells):
-    cells.insert(2, "<th>Test Case Title</th>")
-    cells.insert(3, "<th>Result</th>")
-    cells.insert(4, "<th>Failure Reason</th>")
-
+    cells[:] = []
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_table_row(report, cells):
-    meta = _report_meta.get(report.nodeid, {})
-    case = meta.get("case_key")
-
-    title    = TC_TITLES.get(case, meta.get("description", case or "N/A"))
-    verdict  = _final_verdict_for_case(case) if case else "N/A"
-    diagnosis = _failure_diagnosis(case) if case else "N/A"
-
-    # "What was checked" — concise summary of which checks ran and passed
-    verdict_style = (
-        "color:green;font-weight:bold" if verdict == "PASS"
-        else "color:red;font-weight:bold" if verdict == "FAIL"
-        else ""
-    )
-
-    cells.insert(2, f"<td style='max-width:420px;word-wrap:break-word'>{escape(title)}</td>")
-    cells.insert(3, f"<td style='{verdict_style}'>{escape(verdict)}</td>")
-    cells.insert(4, f"<td style='max-width:380px;word-wrap:break-word'>{escape(diagnosis)}</td>")
+    cells[:] = []
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_html_results_summary(prefix, summary, postfix):
-    present = _coverage_summary.get("present", [])
-    missing = _coverage_summary.get("missing", [])
-
-    all_cases = sorted(
-        [c for c in _case_results.keys() if re.match(r'^row\d+$', c)],
+    # Iterate over ALL row* keys in TC_TITLES — not just ones that ran.
+    # Rows with no results show as NOT AUTOMATED.
+    all_tc_rows = sorted(
+        [k for k in TC_TITLES if re.match(r'^row\d+$', k)],
         key=lambda c: int(c[3:])
     )
-    passed_cases = [c for c in all_cases if _final_verdict_for_case(c) == "PASS"]
-    failed_cases = [c for c in all_cases if _final_verdict_for_case(c) == "FAIL"]
+
+    passed_cases  = [c for c in all_tc_rows if _final_verdict_for_case(c) == "PASS"]
+    failed_cases  = [c for c in all_tc_rows if _final_verdict_for_case(c) == "FAIL"]
+    na_cases      = [c for c in all_tc_rows if _final_verdict_for_case(c) == "N/A"]
 
     rows_html = []
-    for case in all_cases:
+    for case in all_tc_rows:
         title   = TC_TITLES.get(case, case)
         verdict = _final_verdict_for_case(case)
         diag    = _failure_diagnosis(case)
-        color   = "green" if verdict == "PASS" else "red" if verdict == "FAIL" else "gray"
+
+        if verdict == "PASS":
+            color, label = "green", "PASS"
+        elif verdict == "FAIL":
+            color, label = "red", "FAIL"
+        else:
+            color, label = "gray", "NOT AUTOMATED"
+            diag = "No test exists for this case yet."
+
+        # DB identifier columns
+        ids = _case_db_identifiers.get(case, {})
+        should_have     = ", ".join(ids.get("should_have", []))     or "—"
+        should_not_have = ", ".join(ids.get("should_not_have", [])) or "—"
+
         rows_html.append(
             f"<tr>"
             f"<td style='padding:4px 8px'>{escape(title)}</td>"
-            f"<td style='padding:4px 12px;color:{color};font-weight:bold'>{escape(verdict)}</td>"
+            f"<td style='padding:4px 12px;color:{color};font-weight:bold'>{escape(label)}</td>"
             f"<td style='padding:4px 8px'>{escape(diag)}</td>"
+            f"<td style='padding:4px 8px;font-family:monospace;font-size:11px'>{escape(should_have)}</td>"
+            f"<td style='padding:4px 8px;font-family:monospace;font-size:11px'>{escape(should_not_have)}</td>"
             f"</tr>"
         )
 
     summary_table = (
         "<h2>Test Results Summary</h2>"
-        f"<p><b>Total cases:</b> {len(all_cases)} &nbsp;|&nbsp; "
+        f"<p>"
+        f"<b>Total Excel rows:</b> {len(all_tc_rows)} &nbsp;|&nbsp; "
         f"<b style='color:green'>PASSED: {len(passed_cases)}</b> &nbsp;|&nbsp; "
-        f"<b style='color:red'>FAILED: {len(failed_cases)}</b></p>"
-        "<table border='1' cellpadding='0' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+        f"<b style='color:red'>FAILED: {len(failed_cases)}</b> &nbsp;|&nbsp; "
+        f"<b style='color:gray'>NOT AUTOMATED: {len(na_cases)}</b>"
+        f"</p>"
+        "<table border='1' cellpadding='0' cellspacing='0' "
+        "style='border-collapse:collapse;width:100%;font-size:12px'>"
         "<thead><tr style='background:#f0f0f0'>"
-        "<th style='padding:6px 8px;text-align:left'>Test Case Title (exact from Excel)</th>"
-        "<th style='padding:6px 12px'>Result</th>"
+        "<th style='padding:6px 8px;text-align:left;min-width:350px'>Test Case Title (from Excel)</th>"
+        "<th style='padding:6px 12px;min-width:120px'>Result</th>"
         "<th style='padding:6px 8px;text-align:left'>Outcome / Failure Reason</th>"
+        "<th style='padding:6px 8px;text-align:left;min-width:160px'>Should Have Record</th>"
+        "<th style='padding:6px 8px;text-align:left;min-width:160px'>Shouldn&#39;t Have Record</th>"
         "</tr></thead>"
         "<tbody>" + "".join(rows_html) + "</tbody>"
         "</table>"
     )
 
-    prefix.extend([
-        summary_table,
-        "<br>",
-        "<p><i>Note: Code row numbers are offset by 1 from Excel row numbers "
-        "(code row 76 = Excel row 77). Titles above use the exact Excel wording.</i></p>",
-    ])
+    prefix.extend([summary_table])

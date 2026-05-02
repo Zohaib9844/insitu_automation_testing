@@ -1358,3 +1358,519 @@ class TestRow119NoDuplicatePropertyValueJson:
             f"[Row 119] Expected 200, got {self.response.status_code}. "
             f"Body: {self.response.text}"
         )
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  REGRESSION — ROWS 120–152  (JSON format)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestRow120BasicJsonIngestion:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {
+            "ClientUserId": self.client_user_id,
+            "PropertyName": self.property_name,
+            "PropertyValue": "AutoTestValue",
+        })
+        submissions["120"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row120_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 120] Got {self.response.status_code}. Body: {self.response.text}"
+
+
+class TestRow121AbsentFalseNewPropsJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {
+            "ClientUserId": self.client_user_id,
+            "PropertyName": self.property_name,
+            "PropertyValue": "AutoTestValue",
+        })
+        submissions["121"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row121_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 121] Got {self.response.status_code}"
+
+
+class TestRow122AbsentFalseUpdatedPropsJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "OriginalValue"})
+        time.sleep(1)
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "UpdatedValue"})
+        submissions["122"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code, "extra": {"expected_value": "UpdatedValue"}}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row122_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 122] Got {self.response.status_code}"
+
+
+class TestRow123SpaceTrimmingJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {
+            "ClientUserId": f"  {self.client_user_id}  ",
+            "PropertyName": f"  {self.property_name}  ",
+            "PropertyValue": "  SpacedValue  ",
+        })
+        submissions["123"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code, "extra": {"expected_value": "SpacedValue"}}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row123_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 123] Got {self.response.status_code}"
+
+
+class TestRow124MissingClientUserIdJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_property_name, submissions):
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"PropertyName": self.property_name, "PropertyValue": "SomeValue"})
+        submissions["124"] = {"property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row124_missing_client_user_id_returns_400(self):
+        assert self.response.status_code == 400, f"[Row 124] Expected 400, got {self.response.status_code}. Body: {self.response.text}"
+
+
+class TestRow125MissingPropertyNameJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, submissions):
+        self.client_user_id = unique_user_id
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyValue": "SomeValue"})
+        submissions["125"] = {"user_ids": [self.client_user_id], "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row125_missing_property_name_returns_400(self):
+        assert self.response.status_code == 400, f"[Row 125] Expected 400, got {self.response.status_code}. Body: {self.response.text}"
+
+
+class TestRow126MissingPropertyValueJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name})
+        submissions["126"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row126_missing_property_value_returns_400(self):
+        assert self.response.status_code == 400, f"[Row 126] Expected 400, got {self.response.status_code}. Body: {self.response.text}"
+
+
+class TestRow127MissingClientUserIdValueJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.user_valid    = f"{unique_user_id}_V"
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"PropertyName": self.property_name, "PropertyValue": "BadRow"},
+            {"ClientUserId": self.user_valid, "PropertyName": self.property_name, "PropertyValue": "GoodValue"},
+        ])
+        submissions["127"] = {"user_ids": [self.user_valid], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row127_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 127] Got {self.response.status_code}"
+
+
+class TestRow128NullClientUserIdJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.user_valid    = f"{unique_user_id}_V"
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": None, "PropertyName": self.property_name, "PropertyValue": "BadRow"},
+            {"ClientUserId": self.user_valid, "PropertyName": self.property_name, "PropertyValue": "GoodValue"},
+        ])
+        submissions["128"] = {"user_ids": [self.user_valid], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row128_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 128] Got {self.response.status_code}"
+
+
+class TestRow129MissingPropertyNameValueJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.user_valid    = f"{unique_user_id}_V"
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": unique_user_id, "PropertyValue": "BadRow"},
+            {"ClientUserId": self.user_valid, "PropertyName": self.property_name, "PropertyValue": "GoodValue"},
+        ])
+        submissions["129"] = {"user_ids": [self.user_valid], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row129_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 129] Got {self.response.status_code}"
+
+
+class TestRow130NullPropertyNameJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.user_valid    = f"{unique_user_id}_V"
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": unique_user_id, "PropertyName": None, "PropertyValue": "BadRow"},
+            {"ClientUserId": self.user_valid, "PropertyName": self.property_name, "PropertyValue": "GoodValue"},
+        ])
+        submissions["130"] = {"user_ids": [self.user_valid], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row130_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 130] Got {self.response.status_code}"
+
+
+class TestRow131NewUserNotInMappingJson:
+    """Positive test: a brand-new ClientUserId not yet in client_user_mapping must still be ingested."""
+
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {
+            "ClientUserId": self.client_user_id,
+            "PropertyName": self.property_name,
+            "PropertyValue": "AutoTestValue",
+        })
+        submissions["131"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row131_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 131] Got {self.response.status_code}"
+
+
+class TestRow132NullPropertyValueRowSkippedJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.user_valid    = f"{unique_user_id}_V"
+        self.property_name = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": unique_user_id, "PropertyName": self.property_name},
+            {"ClientUserId": self.user_valid, "PropertyName": self.property_name, "PropertyValue": "GoodValue"},
+        ])
+        submissions["132"] = {"user_ids": [self.user_valid], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row132_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 132] Got {self.response.status_code}"
+
+
+# row133 intentionally absent — Excel row 134 = 'file size >1GB, not tested'
+
+
+class TestRow134PropertyValueTextJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["134"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code, "extra": {"expected_col": "property_value", "expected_value": "SomeTextValue"}}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row134_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 134] Got {self.response.status_code}"
+
+
+class TestRow135TypeConflictTextJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "TextWins", "PropertyValueDouble": 99.5})
+        submissions["135"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code, "extra": {"expected_col": "property_value", "expected_value": "TextWins"}}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row135_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 135] Got {self.response.status_code}"
+
+
+class TestRow136NoDuplicateTextJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "AutoTestTextValue"},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "AutoTestTextValue"},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "DifferentTextValue"},
+        ])
+        submissions["136"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row136_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 136] Got {self.response.status_code}"
+
+
+class TestRow137CaseInsensitiveDedupTextJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "AutoTestTextValue"},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "AUTOTESTTEXTVALUE"},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "DifferentValue"},
+        ])
+        submissions["137"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row137_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 137] Got {self.response.status_code}"
+
+
+class TestRow138PropertyValueDoubleJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDouble": 99.5})
+        submissions["138"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row138_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 138] Got {self.response.status_code}"
+
+
+class TestRow139TypeConflictDoubleJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDouble": 99.5})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["139"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row139_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 139] Got {self.response.status_code}"
+
+
+class TestRow140NoDuplicateDoubleJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDouble": 99.5},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDouble": 99.5},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDouble": 1.23},
+        ])
+        submissions["140"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row140_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 140] Got {self.response.status_code}"
+
+
+class TestRow141PropertyValueDateJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDate": "2023-02-03"})
+        submissions["141"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row141_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 141] Got {self.response.status_code}"
+
+
+class TestRow142TypeConflictDateJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDate": "2023-02-03"})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["142"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row142_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 142] Got {self.response.status_code}"
+
+
+class TestRow143NoDuplicateDateJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDate": "2023-02-03"},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueDate": "2023-02-03"},
+        ])
+        submissions["143"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row143_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 143] Got {self.response.status_code}"
+
+
+class TestRow144PropertyValueCurrencyJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueCurrency": 2000.00})
+        submissions["144"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row144_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 144] Got {self.response.status_code}"
+
+
+class TestRow145TypeConflictCurrencyJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueCurrency": 2000.00})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["145"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row145_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 145] Got {self.response.status_code}"
+
+
+class TestRow146NoDuplicateCurrencyJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueCurrency": 2000.00},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueCurrency": 2000.00},
+        ])
+        submissions["146"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row146_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 146] Got {self.response.status_code}"
+
+
+class TestRow147PropertyValueBoolJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueBool": True})
+        submissions["147"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row147_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 147] Got {self.response.status_code}"
+
+
+class TestRow148TypeConflictBoolJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueBool": True})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["148"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row148_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 148] Got {self.response.status_code}"
+
+
+class TestRow149NoDuplicateBoolJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.response = api_client.post_json(SCHEMA_UP, [
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueBool": True},
+            {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueBool": True},
+        ])
+        submissions["149"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row149_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 149] Got {self.response.status_code}"
+
+
+class TestRow150PropertyValueJsonJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        self.json_payload   = {"key": "value", "nested": {"x": 1}}
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueJson": self.json_payload})
+        submissions["150"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row150_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 150] Got {self.response.status_code}"
+
+
+class TestRow151TypeConflictJsonJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueJson": {"key": "value"}})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValue": "SomeTextValue"})
+        submissions["151"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row151_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 151] Got {self.response.status_code}"
+
+
+class TestRow152NoDuplicateJsonJson:
+    @pytest.fixture(autouse=True)
+    def _send(self, unique_user_id, unique_property_name, submissions):
+        self.client_user_id = unique_user_id
+        self.property_name  = unique_property_name
+        payload = {"key": "value", "nested": {"x": 1}}
+        api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueJson": payload})
+        self.response = api_client.post_json(SCHEMA_UP, {"ClientUserId": self.client_user_id, "PropertyName": self.property_name, "PropertyValueJson": payload})
+        submissions["152"] = {"user_ids": [self.client_user_id], "property_name": self.property_name, "api_status": self.response.status_code}
+
+    @pytest.mark.regression
+    @pytest.mark.api
+    def test_row152_api_returns_200(self):
+        assert self.response.status_code == 200, f"[Row 152] Got {self.response.status_code}"
