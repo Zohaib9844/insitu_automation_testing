@@ -20,6 +20,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from utils import api_client
+import json
+import io
+import csv
 
 SCHEMA_UP  = "userproperties"
 SCHEMA_SIG = "signals"
@@ -225,11 +228,12 @@ class TestRow77AbsentFalseNewProps:
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":  self.client_user_id,
-            "PropertyName":  self.property_name,
-            "PropertyValue": "AutoTestValue",
-        })
+        # FIX: spec title explicitly says "csv format" — was incorrectly using post_json
+        csv_body = (
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},AutoTestValue"
+        )
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["77"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -251,19 +255,16 @@ class TestRow78AbsentFalseUpdatedProps:
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        # Initial insert
-        api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":  self.client_user_id,
-            "PropertyName":  self.property_name,
-            "PropertyValue": "OriginalValue",
-        })
+        # FIX: spec title says "csv format" — both calls must be CSV, not JSON
+        api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},OriginalValue"
+        )
         time.sleep(1)
-        # Update same user+prop
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":  self.client_user_id,
-            "PropertyName":  self.property_name,
-            "PropertyValue": "UpdatedValue",
-        })
+        self.response = api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},UpdatedValue"
+        )
         submissions["78"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -545,11 +546,14 @@ class TestRow89EmptyPropertyValueIsInserted:
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":  self.client_user_id,
-            "PropertyName":  self.property_name,
-            "PropertyValue": "",
-        })
+        # FIX: spec title says "csv format" — was incorrectly using post_json
+        # csv.writer quotes the empty string correctly as ""
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["ClientUserId", "PropertyName", "PropertyValue"])
+        writer.writerow([self.client_user_id, self.property_name, ""])
+        csv_body = buf.getvalue().strip()
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["89"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -564,7 +568,6 @@ class TestRow89EmptyPropertyValueIsInserted:
             f"[Row 89] Expected 200 (empty string value is valid), got {self.response.status_code}.\n"
             f"Body: {self.response.text}"
         )
-
 
 class TestRow90UnknownColumnsIgnored:
     @pytest.fixture(autouse=True)
@@ -628,11 +631,12 @@ class TestRow92PropertyValueText:
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":  self.client_user_id,
-            "PropertyName":  self.property_name,
-            "PropertyValue": "SomeTextValue",
-        })
+        # FIX: spec title says "csv format" — was incorrectly using post_json
+        csv_body = (
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},SomeTextValue"
+        )
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["92"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -649,23 +653,39 @@ class TestRow92PropertyValueText:
 
 
 class TestRow93TypeConflictTextVsInt:
-    """Send PropertyValue (text) and PropertyValueInt for same user — text wins."""
+    """
+    Excel row 94: pre-existing text → attempt int → text must be preserved.
+    FIX: scenario was corrected last session but both calls were still post_json.
+    Both calls must be post_csv — spec title says 'csv format'.
+    """
 
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":      self.client_user_id,
-            "PropertyName":      self.property_name,
-            "PropertyValue":     "TextWins",
-            "PropertyValueInt":  42,
-        })
+        self.initial_text   = "ExistingTextValue"
+
+        # Step 1: establish text type via CSV
+        api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},{self.initial_text}"
+        )
+        time.sleep(1)
+
+        # Step 2: attempt int type via CSV (must be rejected — text already exists)
+        self.response = api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueInt\n"
+            f"{self.client_user_id},{self.property_name},42"
+        )
         submissions["93"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value", "expected_value": "TextWins"},
+            "extra": {
+                "expected_col":   "property_value",
+                "expected_value": self.initial_text,
+                "rejected_col":   "property_value_int",
+            },
         }
 
     @pytest.mark.regression
@@ -741,11 +761,12 @@ class TestRow96PropertyValueInt:
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":      self.client_user_id,
-            "PropertyName":      self.property_name,
-            "PropertyValueInt":  42,
-        })
+        # FIX: spec title says "csv format" — was incorrectly using post_json
+        csv_body = (
+            f"ClientUserId,PropertyName,PropertyValueInt\n"
+            f"{self.client_user_id},{self.property_name},42"
+        )
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["96"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -762,30 +783,47 @@ class TestRow96PropertyValueInt:
 
 
 class TestRow97TypeConflictIntVsText:
+    """
+    Excel row 98: pre-existing int → attempt text → int must be preserved.
+    FIX: scenario was corrected last session but both calls were still post_json.
+    Both calls must be post_csv — spec title says 'csv format'.
+    """
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":      self.client_user_id,
-            "PropertyName":      self.property_name,
-            "PropertyValue":     "TextWins",
-            "PropertyValueInt":  42,
-        })
+        self.initial_int    = 42
+
+        # Step 1: establish int type via CSV
+        api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValueInt\n"
+            f"{self.client_user_id},{self.property_name},{self.initial_int}"
+        )
+        time.sleep(1)
+
+        # Step 2: attempt text type via CSV (must be rejected — int already exists)
+        self.response = api_client.post_csv(SCHEMA_UP,
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},SomeTextValue"
+        )
         submissions["97"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value", "expected_value": "TextWins"},
+            "extra": {
+                "initial_int_value": self.initial_int,
+                "attempted_text":    "SomeTextValue",
+                "expected_col":      "property_value_int",
+            },
         }
 
     @pytest.mark.regression
     @pytest.mark.api
     def test_row97_api_returns_200(self):
         assert self.response.status_code == 200, (
-            f"[Row 97] Expected 200, got {self.response.status_code}"
+            f"[Row 97] Expected 200 on conflict attempt, got {self.response.status_code}"
         )
-
 
 class TestRow98NoDuplicatePropertyValueInt:
     @pytest.fixture(autouse=True)
@@ -1251,11 +1289,15 @@ class TestRow116PropertyValueJson:
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
         self.json_payload   = {"key": "value", "nested": {"x": 1}}
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":       self.client_user_id,
-            "PropertyName":       self.property_name,
-            "PropertyValueJson":  self.json_payload,
-        })
+        # FIX: spec title says "csv format" — was incorrectly using post_json.
+        # JSON value must be serialized to string; csv.writer handles quoting.
+        json_str = json.dumps(self.json_payload)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["ClientUserId", "PropertyName", "PropertyValueJson"])
+        writer.writerow([self.client_user_id, self.property_name, json_str])
+        csv_body = buf.getvalue().strip()
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["116"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -1270,18 +1312,21 @@ class TestRow116PropertyValueJson:
             f"[Row 116] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
         )
 
-
 class TestRow117PropertyValueJsonArray:
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
         self.json_payload   = [1, 2, {"three": 3}]
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":       self.client_user_id,
-            "PropertyName":       self.property_name,
-            "PropertyValueJson":  self.json_payload,
-        })
+        # FIX: spec (Excel row 118) shows CSV with PropertyValueJson column.
+        # Array serialized to JSON string; csv.writer handles quoting.
+        json_str = json.dumps(self.json_payload)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["ClientUserId", "PropertyName", "PropertyValueJson"])
+        writer.writerow([self.client_user_id, self.property_name, json_str])
+        csv_body = buf.getvalue().strip()
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["117"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
@@ -1296,24 +1341,44 @@ class TestRow117PropertyValueJsonArray:
             f"[Row 117] Expected 200, got {self.response.status_code}. Body: {self.response.text}"
         )
 
-
 class TestRow118TypeConflictJsonVsText:
+    """
+    Excel row 119: pre-existing JSON → attempt text → JSON must be preserved.
+    FIX: was sending PropertyValue + PropertyValueJson simultaneously via post_json.
+    Correct: two sequential post_csv calls — establish JSON first, then attempt text.
+    """
+
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
         self.json_payload   = {"key": "value"}
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":       self.client_user_id,
-            "PropertyName":       self.property_name,
-            "PropertyValue":      "TextValue",
-            "PropertyValueJson":  self.json_payload,
-        })
+
+        # Step 1: establish JSON type via CSV
+        json_str = json.dumps(self.json_payload)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["ClientUserId", "PropertyName", "PropertyValueJson"])
+        writer.writerow([self.client_user_id, self.property_name, json_str])
+        csv_body_1 = buf.getvalue().strip()
+        api_client.post_csv(SCHEMA_UP, csv_body_1)
+        time.sleep(1)
+
+        # Step 2: attempt text type via CSV (must be rejected — JSON already exists)
+        csv_body_2 = (
+            f"ClientUserId,PropertyName,PropertyValue\n"
+            f"{self.client_user_id},{self.property_name},SomeTextValue"
+        )
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body_2)
         submissions["118"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,
             "api_status":    self.response.status_code,
-            "extra":         {"expected_col": "property_value_json", "expected_value": self.json_payload},
+            "extra": {
+                "expected_col":   "property_value_json",
+                "expected_value": self.json_payload,
+                "attempted_text": "SomeTextValue",
+            },
         }
 
     @pytest.mark.regression
@@ -1325,26 +1390,27 @@ class TestRow118TypeConflictJsonVsText:
 
 
 class TestRow119NoDuplicatePropertyValueJson:
-    """Row 119 (Excel 120): Sending the same PropertyValueJson twice for the same user+property.
-    No duplicate rows should be stored in the DB."""
+    """
+    Excel row 120: same PropertyValueJson sent twice via CSV — no duplicates in DB.
+    FIX: was using two separate post_json calls. Correct: one post_csv with two
+    identical rows in the same payload (matches how all other CSV dedup rows work).
+    """
 
     @pytest.fixture(autouse=True)
     def _send(self, unique_user_id, unique_property_name, submissions):
         self.client_user_id = unique_user_id
         self.property_name  = unique_property_name
         self.json_payload   = {"key": "value", "nested": {"x": 1}}
-
-        # Send identical JSON payload twice
-        api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":      self.client_user_id,
-            "PropertyName":      self.property_name,
-            "PropertyValueJson": self.json_payload,
-        })
-        self.response = api_client.post_json(SCHEMA_UP, {
-            "ClientUserId":      self.client_user_id,
-            "PropertyName":      self.property_name,
-            "PropertyValueJson": self.json_payload,
-        })
+        # FIX: spec title says "csv format" — was using two separate post_json calls.
+        # Both duplicate rows go in one CSV payload, same as rows 94, 98, 102, etc.
+        json_str = json.dumps(self.json_payload)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["ClientUserId", "PropertyName", "PropertyValueJson"])
+        writer.writerow([self.client_user_id, self.property_name, json_str])
+        writer.writerow([self.client_user_id, self.property_name, json_str])  # duplicate row
+        csv_body = buf.getvalue().strip()
+        self.response = api_client.post_csv(SCHEMA_UP, csv_body)
         submissions["119"] = {
             "user_ids":      [self.client_user_id],
             "property_name": self.property_name,

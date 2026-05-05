@@ -153,9 +153,14 @@ def unique_signal_name(run_id) -> str:
     return f"AT_SIG_{run_id}_{int(time.time())}"
 
 
+# conftest.py — fix unique_property_name to avoid same-second collisions
+_prop_counter = 0
+
 @pytest.fixture
 def unique_property_name(run_id) -> str:
-    return f"AT_PROP_{run_id}_{int(time.time())}"
+    global _prop_counter
+    _prop_counter += 1
+    return f"AT_PROP_{run_id}_{_prop_counter:04d}"
 
 
 # ── Submissions registry ───────────────────────────────────────────────────────

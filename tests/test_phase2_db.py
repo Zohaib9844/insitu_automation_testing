@@ -165,6 +165,7 @@ class TestRow76DB:
     def test_row76_db_has_record(self, db_snapshot, submissions):
         sub = submissions.get("76", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 76] No user_properties row for '{uid}'"
         assert any(
@@ -179,6 +180,7 @@ class TestRow77DB:
     def test_row77_absent_is_false_and_modified_date_set(self, db_snapshot, submissions):
         sub = submissions.get("77", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 77] No user_properties row for '{uid}'"
         row = rows[0]
@@ -192,11 +194,20 @@ class TestRow78DB:
     def test_row78_absent_false_and_value_updated(self, db_snapshot, submissions):
         sub = submissions.get("78", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 78] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match, f"[Row 78] Property row not found"
+        assert match, f"[Row 78] Property row not found for property '{sub.get('property_name')}'"
         row = match[0]
+        # FIX: method name said "absent_false_and_value_updated" but bsent + modified_date
+        # were never actually asserted — only property_value was checked. Now all three are checked.
+        assert row.get("bsent") is False, (
+            f"[Row 78] bsent should be False after update, got '{row.get('bsent')}'"
+        )
+        assert row.get("modified_date") is not None, (
+            "[Row 78] modified_date should be set (not null) after the update call"
+        )
         assert row.get("property_value") == "UpdatedValue", (
             f"[Row 78] Expected 'UpdatedValue' after update, got '{row.get('property_value')}'"
         )
@@ -208,6 +219,8 @@ class TestRow79DB:
     def test_row79_valid_rows_inserted_bad_row_rejected(self, db_snapshot, submissions):
         sub = submissions.get("79", {})
         uid1, uid2 = sub.get("user_ids", [None, None])
+        self.client_user_id = uid1
+        self.client_user_id_2 = uid2
 
         # Valid rows must be present
         assert _up_rows(db_snapshot, uid1), (
@@ -221,6 +234,7 @@ class TestRow79DB:
 
         # Bad row (multi-datatype conflict) must NOT be present
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
+            self.client_user_id_bad = bad_uid
             bad_rows = _up_rows(db_snapshot, bad_uid)
             assert not bad_rows, (
                 f"[Row 79] BAD ROW '{bad_uid}' (had both PropertyValue + PropertyValueDouble) "
@@ -233,6 +247,7 @@ class TestRow80DB:
     def test_row80_trimmed_user_id_and_value_in_db(self, db_snapshot, submissions):
         sub   = submissions.get("80", {})
         uid   = sub.get("user_ids", [None])[0]   # trimmed version — what SHOULD be in DB
+        self.client_user_id = uid
         padded_uid = f"  {uid}  "                  # what would appear if trimming FAILED
 
         rows = _up_rows(db_snapshot, uid)
@@ -293,6 +308,7 @@ class TestRow82DB:
     def test_row82_no_db_insert_when_property_name_missing(self, db_snapshot, submissions):
         sub = submissions.get("82", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id_bad = uid
         assert uid, "[Row 82] Missing user_id from Phase-1 submission metadata"
         rows = _up_rows(db_snapshot, uid)
         assert not rows, (
@@ -307,6 +323,7 @@ class TestRow83DB:
     def test_row83_no_db_insert_when_property_value_missing(self, db_snapshot, submissions):
         sub = submissions.get("83", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id_bad = uid
         assert uid, "[Row 83] Missing user_id from Phase-1 submission metadata"
         rows = _up_rows(db_snapshot, uid)
         assert not rows, (
@@ -338,6 +355,7 @@ class TestRow84DB:
     def test_row84_valid_row_inserted_bad_skipped(self, db_snapshot, submissions):
         sub = submissions.get("84", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 84] Valid row for '{uid}' not in user_properties"
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
             bad_rows = _up_rows(db_snapshot, bad_uid)
@@ -350,6 +368,7 @@ class TestRow85DB:
     def test_row85_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("85", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 85] Valid row for '{uid}' not in user_properties"
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
             bad_rows = _up_rows(db_snapshot, bad_uid)
@@ -362,6 +381,7 @@ class TestRow86DB:
     def test_row86_valid_row_inserted_bad_row_skipped(self, db_snapshot, submissions):
         sub = submissions.get("86", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 86] Valid row for '{uid}' not in user_properties"
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
             bad_rows = _up_rows(db_snapshot, bad_uid)
@@ -374,6 +394,7 @@ class TestRow87DB:
     def test_row87_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("87", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 87] Valid row for '{uid}' not in user_properties"
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
             bad_rows = _up_rows(db_snapshot, bad_uid)
@@ -386,6 +407,7 @@ class TestRow88DB:
     def test_row88_valid_row_inserted_bad_skipped(self, db_snapshot, submissions):
         sub = submissions.get("88", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 88] Valid row for '{uid}' not in user_properties"
         for bad_uid in sub.get("extra", {}).get("absent_user_ids", []):
             bad_rows = _up_rows(db_snapshot, bad_uid)
@@ -398,6 +420,7 @@ class TestRow89DB:
     def test_row89_empty_value_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("89", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 89] Row with empty PropertyValue not inserted for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -413,6 +436,7 @@ class TestRow90DB:
     def test_row90_required_columns_inserted(self, db_snapshot, submissions):
         sub = submissions.get("90", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 90] No user_properties row for '{uid}'"
 
 
@@ -422,6 +446,7 @@ class TestRow92DB:
     def test_row92_text_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("92", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 92] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -437,22 +462,25 @@ class TestRow93DB:
     def test_row93_text_value_preserved_int_not_set(self, db_snapshot, submissions):
         sub = submissions.get("93", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 93] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
         assert match, f"[Row 93] Property row not found"
         row = match[0]
 
-        # Winning column: text must be stored in property_value
-        assert row.get("property_value") == "TextWins", (
-            f"[Row 93] property_value should be 'TextWins', got '{row.get('property_value')}'"
+        # FIX: was hardcoded "TextWins" — that value only ever existed in the old
+        # wrong simultaneous-send scenario. Now reads from submissions so it stays
+        # in sync with whatever the API fixture actually submitted.
+        expected_text = sub.get("extra", {}).get("expected_value", "ExistingTextValue")
+        assert row.get("property_value") == expected_text, (
+            f"[Row 93] property_value should still be '{expected_text}' (original text preserved), "
+            f"got '{row.get('property_value')}'"
         )
-        # Losing column: property_value_int must NOT have been populated
         assert row.get("property_value_int") is None, (
-            f"[Row 93] property_value_int should be NULL when text wins, "
+            f"[Row 93] property_value_int should be NULL (int rejected when text already exists), "
             f"got {row.get('property_value_int')}"
         )
-
 
 class TestRow94DB:
     @pytest.mark.regression
@@ -460,6 +488,7 @@ class TestRow94DB:
     def test_row94_no_duplicate_text_rows(self, db_snapshot, submissions):
         sub = submissions.get("94", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, (
             f"[Row 94] No user_properties row for '{uid}' — "
@@ -481,6 +510,7 @@ class TestRow95DB:
     def test_row95_single_row_after_case_insensitive_dedup(self, db_snapshot, submissions):
         sub = submissions.get("95", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, (
             f"[Row 95] No user_properties row for '{uid}' — "
@@ -502,6 +532,7 @@ class TestRow96DB:
     def test_row96_int_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("96", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 96] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -514,23 +545,32 @@ class TestRow96DB:
 class TestRow97DB:
     @pytest.mark.regression
     @pytest.mark.db
-    def test_row97_text_wins_over_int(self, db_snapshot, submissions):
+    def test_row97_int_preserved_text_rejected(self, db_snapshot, submissions):
+        """
+        FIX: Previous assertion was completely backwards — was asserting text wins and int is NULL.
+        Spec: when property_value_int already exists, a text-type submission must be rejected.
+        Int column must be preserved. Text column must NOT contain the attempted value.
+        """
         sub = submissions.get("97", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 97] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
         assert match, f"[Row 97] Property row not found"
         row = match[0]
 
-        # Winning column: text must be in property_value
-        assert row.get("property_value") == "TextWins", (
-            f"[Row 97] property_value should be 'TextWins', got '{row.get('property_value')}'"
+        # FIX: int must be preserved — was previously asserting it is NULL (completely wrong)
+        assert row.get("property_value_int") is not None, (
+            f"[Row 97] property_value_int should be preserved (was {sub['extra']['initial_int_value']}). "
+            f"Got NULL — either the initial insert failed or type-protection is not working."
         )
-        # Losing column: property_value_int must NOT have been populated
-        assert row.get("property_value_int") is None, (
-            f"[Row 97] property_value_int should be NULL when text wins, "
-            f"got {row.get('property_value_int')}"
+
+        # FIX: text must NOT have been stored — was previously asserting text == "TextWins" (completely wrong)
+        attempted_text = sub.get("extra", {}).get("attempted_text", "SomeTextValue")
+        assert row.get("property_value") != attempted_text, (
+            f"[Row 97] property_value must NOT be '{attempted_text}' — "
+            f"text-type insertion must be rejected when int already exists in property_value_int."
         )
 
 
@@ -540,6 +580,7 @@ class TestRow98DB:
     def test_row98_no_duplicate_rows(self, db_snapshot, submissions):
         sub = submissions.get("98", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 98] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -552,6 +593,7 @@ class TestRow99DB:
     def test_row99_single_row_in_db(self, db_snapshot, submissions):
         sub = submissions.get("99", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 99] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
@@ -564,6 +606,7 @@ class TestRow100DB:
     def test_row100_double_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("100", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 100] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -577,6 +620,7 @@ class TestRow101DB:
     def test_row101_double_preserved_text_not_set(self, db_snapshot, submissions):
         sub = submissions.get("101", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 101] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -592,6 +636,7 @@ class TestRow102DB:
     def test_row102_no_duplicate_rows(self, db_snapshot, submissions):
         sub = submissions.get("102", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 102] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -604,6 +649,7 @@ class TestRow103DB:
     def test_row103_single_row_in_db(self, db_snapshot, submissions):
         sub = submissions.get("103", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 103] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
@@ -616,6 +662,7 @@ class TestRow104DB:
     def test_row104_date_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("104", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 104] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -629,6 +676,7 @@ class TestRow105DB:
     def test_row105_date_preserved_text_not_set(self, db_snapshot, submissions):
         sub = submissions.get("105", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 105] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -644,6 +692,7 @@ class TestRow106DB:
     def test_row106_no_duplicate_rows(self, db_snapshot, submissions):
         sub = submissions.get("106", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 106] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -656,6 +705,7 @@ class TestRow107DB:
     def test_row107_single_row_in_db(self, db_snapshot, submissions):
         sub = submissions.get("107", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 107] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
@@ -668,6 +718,7 @@ class TestRow108DB:
     def test_row108_currency_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("108", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 108] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -681,6 +732,7 @@ class TestRow109DB:
     def test_row109_currency_preserved_text_not_set(self, db_snapshot, submissions):
         sub = submissions.get("109", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 109] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -696,6 +748,7 @@ class TestRow110DB:
     def test_row110_no_duplicate_rows(self, db_snapshot, submissions):
         sub = submissions.get("110", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 110] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -708,6 +761,7 @@ class TestRow111DB:
     def test_row111_single_row_in_db(self, db_snapshot, submissions):
         sub = submissions.get("111", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 111] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
@@ -720,6 +774,7 @@ class TestRow112DB:
     def test_row112_bool_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("112", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 112] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -733,6 +788,7 @@ class TestRow113DB:
     def test_row113_bool_preserved_text_not_set(self, db_snapshot, submissions):
         sub = submissions.get("113", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 113] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -748,6 +804,7 @@ class TestRow114DB:
     def test_row114_no_duplicate_rows(self, db_snapshot, submissions):
         sub = submissions.get("114", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 114] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -760,6 +817,7 @@ class TestRow115DB:
     def test_row115_single_row_in_db(self, db_snapshot, submissions):
         sub = submissions.get("115", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 115] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").strip().lower() == sub["property_name"].lower()]
@@ -772,6 +830,7 @@ class TestRow116DB:
     def test_row116_json_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("116", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 116] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -789,6 +848,7 @@ class TestRow117DB:
     def test_row117_json_array_in_db(self, db_snapshot, submissions):
         sub = submissions.get("117", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 117] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -804,14 +864,23 @@ class TestRow118DB:
     def test_row118_json_preserved_text_not_set(self, db_snapshot, submissions):
         sub = submissions.get("118", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 118] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
-        assert match
+        assert match, f"[Row 118] Property row not found"
         row = match[0]
-        json_val = row.get("property_value_json")
-        assert json_val is not None, (
-            f"[Row 118] JSON value should be preserved, not NULL.\nFull row: {row}"
+
+        # JSON must be preserved
+        assert row.get("property_value_json") is not None, (
+            f"[Row 118] property_value_json should be preserved, got NULL.\nFull row: {row}"
+        )
+        # FIX: previously only checked json != None; now also verifies type-protection
+        # rejected the text attempt (aligns with sequential scenario)
+        attempted_text = sub.get("extra", {}).get("attempted_text", "SomeTextValue")
+        assert row.get("property_value") != attempted_text, (
+            f"[Row 118] property_value must NOT be '{attempted_text}' — "
+            f"text insertion must be rejected when JSON already exists in property_value_json."
         )
 
 
@@ -821,6 +890,7 @@ class TestRow119DB:
     def test_row119_no_duplicate_json_rows(self, db_snapshot, submissions):
         sub = submissions.get("119", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, (
             f"[Row 119] No user_properties row for '{uid}' — "
@@ -846,6 +916,7 @@ class TestRow120DB:
     def test_row120_db_has_record(self, db_snapshot, submissions):
         sub = submissions.get("120", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 120] No user_properties row for '{uid}'"
 
 
@@ -855,6 +926,7 @@ class TestRow121DB:
     def test_row121_absent_false_and_modified_date_set(self, db_snapshot, submissions):
         sub = submissions.get("121", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 121] No user_properties row for '{uid}'"
         assert rows[0].get("bsent") is False, f"[Row 121] bsent should be False"
@@ -867,6 +939,7 @@ class TestRow122DB:
     def test_row122_value_updated(self, db_snapshot, submissions):
         sub = submissions.get("122", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 122] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -881,6 +954,7 @@ class TestRow123DB:
     def test_row123_trimmed_values_in_db(self, db_snapshot, submissions):
         sub = submissions.get("123", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 123] No user_properties row for trimmed UID '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -895,6 +969,8 @@ class TestRow124DB:
     @pytest.mark.db
     def test_row124_no_db_insert_when_client_user_id_missing(self, db_snapshot, submissions):
         sub = submissions.get("124", {})
+        uid = sub.get("user_ids", [None])[0]
+        self.client_user_id_bad = uid
         prop = (sub.get("property_name") or "").lower()
         matches = [r for r in _all_up_rows(db_snapshot) if (r.get("property_name") or "").lower() == prop]
         assert not matches, f"[Row 124] Expected no insert (missing ClientUserId), found: {matches}"
@@ -906,6 +982,7 @@ class TestRow125DB:
     def test_row125_no_db_insert_when_property_name_missing(self, db_snapshot, submissions):
         sub = submissions.get("125", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id_bad = uid
         assert not _up_rows(db_snapshot, uid), f"[Row 125] Expected no insert (missing PropertyName)"
 
 
@@ -915,6 +992,7 @@ class TestRow126DB:
     def test_row126_no_db_insert_when_property_value_missing(self, db_snapshot, submissions):
         sub = submissions.get("126", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id_bad = uid
         assert not _up_rows(db_snapshot, uid), f"[Row 126] Expected no insert (missing PropertyValue)"
 
 
@@ -924,6 +1002,7 @@ class TestRow127DB:
     def test_row127_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("127", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 127] Valid row for '{uid}' not in user_properties"
 
 
@@ -933,6 +1012,7 @@ class TestRow128DB:
     def test_row128_valid_row_inserted_null_skipped(self, db_snapshot, submissions):
         sub = submissions.get("128", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 128] Valid row for '{uid}' not in user_properties"
 
 
@@ -942,6 +1022,7 @@ class TestRow129DB:
     def test_row129_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("129", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 129] Valid row for '{uid}' not in user_properties"
 
 
@@ -951,6 +1032,7 @@ class TestRow130DB:
     def test_row130_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("130", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 130] Valid row for '{uid}' not in user_properties"
 
 
@@ -960,6 +1042,7 @@ class TestRow131DB:
     def test_row131_new_user_inserted_and_mapped(self, db_snapshot, submissions):
         sub = submissions.get("131", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 131] No user_properties row for new user '{uid}'"
         assert _mapping_rows(db_snapshot, uid), f"[Row 131] New user '{uid}' not in client_user_mapping"
 
@@ -970,6 +1053,7 @@ class TestRow132DB:
     def test_row132_valid_row_inserted(self, db_snapshot, submissions):
         sub = submissions.get("132", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         assert _up_rows(db_snapshot, uid), f"[Row 132] Valid row for '{uid}' not in user_properties"
 
 
@@ -979,6 +1063,7 @@ class TestRow134DB:
     def test_row134_text_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("134", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 134] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -993,6 +1078,7 @@ class TestRow135DB:
     def test_row135_text_wins_over_double(self, db_snapshot, submissions):
         sub = submissions.get("135", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 135] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1007,6 +1093,7 @@ class TestRow136DB:
     def test_row136_no_duplicate_text_rows(self, db_snapshot, submissions):
         sub = submissions.get("136", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 136] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1019,6 +1106,7 @@ class TestRow137DB:
     def test_row137_case_insensitive_dedup_text(self, db_snapshot, submissions):
         sub = submissions.get("137", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 137] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1031,6 +1119,7 @@ class TestRow138DB:
     def test_row138_double_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("138", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 138] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1043,6 +1132,7 @@ class TestRow139DB:
     def test_row139_double_preserved_text_not_applied(self, db_snapshot, submissions):
         sub = submissions.get("139", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 139] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1057,6 +1147,7 @@ class TestRow140DB:
     def test_row140_no_duplicate_double_rows(self, db_snapshot, submissions):
         sub = submissions.get("140", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 140] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1069,6 +1160,7 @@ class TestRow141DB:
     def test_row141_date_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("141", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 141] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1081,6 +1173,7 @@ class TestRow142DB:
     def test_row142_date_preserved_text_not_applied(self, db_snapshot, submissions):
         sub = submissions.get("142", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 142] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1095,6 +1188,7 @@ class TestRow143DB:
     def test_row143_no_duplicate_date_rows(self, db_snapshot, submissions):
         sub = submissions.get("143", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 143] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1107,6 +1201,7 @@ class TestRow144DB:
     def test_row144_currency_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("144", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 144] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1119,6 +1214,7 @@ class TestRow145DB:
     def test_row145_currency_preserved_text_not_applied(self, db_snapshot, submissions):
         sub = submissions.get("145", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 145] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1133,6 +1229,7 @@ class TestRow146DB:
     def test_row146_no_duplicate_currency_rows(self, db_snapshot, submissions):
         sub = submissions.get("146", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 146] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1145,6 +1242,7 @@ class TestRow147DB:
     def test_row147_bool_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("147", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 147] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1157,6 +1255,7 @@ class TestRow148DB:
     def test_row148_bool_preserved_text_not_applied(self, db_snapshot, submissions):
         sub = submissions.get("148", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 148] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1171,6 +1270,7 @@ class TestRow149DB:
     def test_row149_no_duplicate_bool_rows(self, db_snapshot, submissions):
         sub = submissions.get("149", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 149] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1183,6 +1283,7 @@ class TestRow150DB:
     def test_row150_json_value_in_db(self, db_snapshot, submissions):
         sub = submissions.get("150", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 150] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1195,6 +1296,7 @@ class TestRow151DB:
     def test_row151_json_preserved_text_not_applied(self, db_snapshot, submissions):
         sub = submissions.get("151", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 151] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
@@ -1209,6 +1311,7 @@ class TestRow152DB:
     def test_row152_no_duplicate_json_rows(self, db_snapshot, submissions):
         sub = submissions.get("152", {})
         uid = sub.get("user_ids", [None])[0]
+        self.client_user_id = uid
         rows = _up_rows(db_snapshot, uid)
         assert rows, f"[Row 152] No user_properties row for '{uid}'"
         match = [r for r in rows if r.get("property_name", "").lower() == sub["property_name"].lower()]
